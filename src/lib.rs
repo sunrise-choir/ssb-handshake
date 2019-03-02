@@ -64,7 +64,7 @@ impl NetworkId {
             0xdb, 0x63, 0x5c, 0xe2, 0x64, 0x41, 0xcc, 0x5d,
             0xac, 0x1b, 0x08, 0x42, 0x0c, 0xea, 0xac, 0x23,
             0x08, 0x39, 0xb7, 0x55, 0x84, 0x5a, 0x9f, 0xfb];
-        NetworkId(AuthKey::from_slice(&b).unwrap())
+        NetworkId::from_slice(&b).unwrap()
     }
     pub fn as_slice(&self) -> &[u8] {
         &self.0[..]
@@ -434,7 +434,6 @@ impl ClientAuth {
     ///     )
     ///   )
     ///
-    /// Server verifies:
     ///   client_auth_sign_data = ... // as constructed on the client side
     ///   assert_nacl_sign_verify_detached(
     ///     sig: detached_signature_A,
@@ -581,15 +580,29 @@ impl SharedC {
 /// ## Message 4
 /// Server acknowledge (Server to Client)
 ///
-/// detached_signature_B = nacl_sign_detached(
-///   msg: concat(
-///     network_identifier,
-///     detached_signature_A,
-///     client_longterm_pk,
-///     sha256(shared_secret_ab)
-///   ),
-///   key: server_longterm_sk
-/// )
+/// The server accepts the handshake by signing a message using
+/// their long term secret key. It includes a copy of the client’s
+///  previous signature. The server’s signature is enclosed in a
+/// secret box using all of the shared secrets.
+///
+/// Upon receiving it, the client opens the box and verifies the
+/// server’s signature.
+
+/// Similarly to the previous message, this secret box also uses an
+/// all-zero nonce because it is the only secret box that ever uses the key
+/// sha256(concat(net_id, shared_secret_ab, shared_secret_aB, shared_secret_Ab)).
+///
+/// Server computes:
+///   detached_signature_B = nacl_sign_detached(
+///     msg: concat(
+///       network_identifier,
+///       detached_signature_A,
+///       client_longterm_pk,
+///       sha256(shared_secret_ab)
+///     ),
+///     key: server_longterm_sk
+///   )
+///
 /// Server sends (80 bytes):
 ///   nacl_secret_box(
 ///     msg: detached_signature_B,
@@ -637,30 +650,29 @@ impl ServerAccept {
         }
     }
 
+    /// Client verifies:
+    ///   detached_signature_B = assert_nacl_secretbox_open(
+    ///     ciphertext: msg4,
+    ///     nonce: 24_bytes_of_zeros,
+    ///     key: sha256(
+    ///       concat(
+    ///         network_identifier,
+    ///         shared_secret_ab,
+    ///         shared_secret_aB,
+    ///         shared_secret_Ab
+    ///       ))
+    ///     )
     ///
-    /// detached_signature_B = assert_nacl_secretbox_open(
-    ///  ciphertext: msg4,
-    ///  nonce: 24_bytes_of_zeros,
-    ///  key: sha256(
-    ///    concat(
-    ///      network_identifier,
-    ///      shared_secret_ab,
-    ///      shared_secret_aB,
-    ///      shared_secret_Ab
+    ///    assert_nacl_sign_verify_detached(
+    ///      sig: detached_signature_B,
+    ///      msg: concat(
+    ///        network_identifier,
+    ///        detached_signature_A,
+    ///        client_longterm_pk,
+    ///        sha256(shared_secret_ab)
+    ///      ),
+    ///      key: server_longterm_pk
     ///    )
-    ///  )
-    ///)
-    ///
-    ///assert_nacl_sign_verify_detached(
-    ///  sig: detached_signature_B,
-    ///  msg: concat(
-    ///    network_identifier,
-    ///    detached_signature_A,
-    ///    client_longterm_pk,
-    ///    sha256(shared_secret_ab)
-    ///  ),
-    ///  key: server_longterm_pk
-    ///)
     #[must_use]
     pub fn open_and_verify(&self,
                            client_sk: &ClientSecretKey,
@@ -791,6 +803,11 @@ fn build_shared_key(pk: &PublicKey,
 }
 
 
+/// At this point the handshake has succeeded. The client and
+/// server have proven their identities to each other.
+///
+/// The shared secrets established during the handshake are used
+/// to set up a pair of box streams for securely exchanging further messages.
 pub struct ClientToServerKey(secretbox::Key);
 impl ClientToServerKey {
     pub fn new(server_pk: &ServerPublicKey,
