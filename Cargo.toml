@@ -8,7 +8,7 @@ description = "Secret-handshake protocol core"
 repository = "https://github.com/sbillig/shs_core"
 documentation = "https://docs.rs/shs_core/"
 readme = "README.md"
-keywords = ["secret handshake", "handshake", "ssb", "scuttlebutt", "crypto"]
+keywords = ["secret-handshake", "handshake", "ssb", "scuttlebutt", "crypto"]
 
 [dependencies]
 sodiumoxide = "0.2.0"
