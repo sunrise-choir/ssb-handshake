@@ -44,8 +44,8 @@ fn client(to_server: Sender<Vec<u8>>, from_server: Receiver<Vec<u8>>,
     let _c2s_key = ClientToServerKey::new(&server_pk, &net_id, &shared_a, &shared_b, &shared_c);
     let _s2c_key = ServerToClientKey::new(&pk, &net_id, &shared_a, &shared_b, &shared_c);
 
-    let mut c2s_nonces = ClientToServerNonceGen::new(&server_pk, &net_id);
-    let mut s2c_nonces = ServerToClientNonceGen::new(&pk, &net_id);
+    let mut c2s_nonces = ClientToServerNonceGen::new(&server_eph_pk, &net_id);
+    let mut s2c_nonces = ServerToClientNonceGen::new(&eph_pk, &net_id);
 
     let _n = c2s_nonces.next();
     let _n = s2c_nonces.next();
@@ -92,8 +92,8 @@ fn server(to_client: Sender<Vec<u8>>, from_client: Receiver<Vec<u8>>,
     let _c2s_key = ClientToServerKey::new(&pk, &net_id, &shared_a, &shared_b, &shared_c);
     let _s2c_key = ServerToClientKey::new(&client_pk, &net_id, &shared_a, &shared_b, &shared_c);
 
-    let mut c2s_nonces = ClientToServerNonceGen::new(&pk, &net_id);
-    let mut s2c_nonces = ServerToClientNonceGen::new(&client_pk, &net_id);
+    let mut c2s_nonces = ClientToServerNonceGen::new(&eph_pk, &net_id);
+    let mut s2c_nonces = ServerToClientNonceGen::new(&client_eph_pk, &net_id);
 
     let _n = c2s_nonces.next();
     let _n = s2c_nonces.next();
@@ -116,7 +116,5 @@ fn ok() {
 
     client_thread.join().unwrap();
     server_thread.join().unwrap();
-
-
 
 }

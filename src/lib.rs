@@ -31,14 +31,18 @@ pub struct ClientSecretKey(SecretKey);
 pub struct ServerPublicKey(PublicKey);
 impl ServerPublicKey {
     pub fn from_slice(b: &[u8]) -> Option<ServerPublicKey> {
-        PublicKey::from_slice(b).map(|pk| ServerPublicKey(pk))
+        Some(ServerPublicKey(PublicKey::from_slice(b)?))
     }
     pub fn as_slice(&self) -> &[u8] {
-        unsafe { bytes(self) }
+        &self.0[..]
     }
 }
 pub struct ServerSecretKey(SecretKey);
-
+impl ServerSecretKey {
+    pub fn from_slice(b: &[u8]) -> Option<ServerSecretKey> {
+        Some(ServerSecretKey(SecretKey::from_slice(b)?))
+    }
+}
 #[derive(Clone)]
 pub struct ClientSignature(Signature);
 pub struct ServerSignature(Signature);
@@ -61,6 +65,12 @@ impl NetworkId {
             0xac, 0x1b, 0x08, 0x42, 0x0c, 0xea, 0xac, 0x23,
             0x08, 0x39, 0xb7, 0x55, 0x84, 0x5a, 0x9f, 0xfb];
         NetworkId(AuthKey::from_slice(&b).unwrap())
+    }
+    pub fn as_slice(&self) -> &[u8] {
+        &self.0[..]
+    }
+    pub fn from_slice(b: &[u8]) -> Option<NetworkId> {
+        Some(NetworkId(AuthKey::from_slice(b)?))
     }
 }
 
@@ -276,7 +286,7 @@ impl SharedA {
     ///     server_ephemeral_pk
     ///   )
     pub fn client_side(sk: &ClientEphSecretKey, pk: &ServerEphPublicKey) -> Option<SharedA> {
-        derive_shared_secret(&sk.0, &pk.0).map(|s| SharedA(s))
+        Some(SharedA(derive_shared_secret(&sk.0, &pk.0)?))
     }
 
     /// Server computes:
@@ -285,7 +295,7 @@ impl SharedA {
     ///    client_ephemeral_pk
     ///  )
     pub fn server_side(sk: &ServerEphSecretKey, pk: &ClientEphPublicKey) -> Option<SharedA> {
-        derive_shared_secret(&sk.0, &pk.0).map(|s| SharedA(s))
+        Some(SharedA(derive_shared_secret(&sk.0, &pk.0)?))
     }
 
     fn hash(&self) -> SharedAHash {
@@ -311,8 +321,7 @@ impl SharedB {
     pub fn client_side(sk: &ClientEphSecretKey, pk: &ServerPublicKey)
                    -> Option<SharedB>
     {
-        derive_shared_secret(&sk.0, &pk_to_curve(&pk.0)?)
-            .map(|s| SharedB(s))
+        Some(SharedB(derive_shared_secret(&sk.0, &pk_to_curve(&pk.0)?)?))
     }
 
     /// Server computes:
@@ -323,8 +332,7 @@ impl SharedB {
     pub fn server_side(sk: &ServerSecretKey, pk: &ClientEphPublicKey)
                    -> Option<SharedB>
     {
-        derive_shared_secret(&sk_to_curve(&sk.0)?, &pk.0)
-            .map(|s| SharedB(s))
+        Some(SharedB(derive_shared_secret(&sk_to_curve(&sk.0)?, &pk.0)?))
     }
 }
 
@@ -555,8 +563,7 @@ impl SharedC {
     ///   )
     pub fn client_side(sk: &ClientSecretKey, pk: &ServerEphPublicKey)
                    -> Option<SharedC> {
-        derive_shared_secret(&sk_to_curve(&sk.0)?, &pk.0)
-            .map(|s| SharedC(s))
+        Some(SharedC(derive_shared_secret(&sk_to_curve(&sk.0)?, &pk.0)?))
     }
 
     /// Server computes:
@@ -566,8 +573,7 @@ impl SharedC {
     ///   )
     pub fn server_side(sk: &ServerEphSecretKey, pk: &ClientPublicKey)
                    -> Option<SharedC> {
-        derive_shared_secret(&sk.0, &pk_to_curve(&pk.0)?)
-            .map(|s| SharedC(s))
+        Some(SharedC(derive_shared_secret(&sk.0, &pk_to_curve(&pk.0)?)?))
     }
 }
 
@@ -796,6 +802,9 @@ impl ClientToServerKey {
         ClientToServerKey(build_shared_key(&server_pk.0, net_id,
                                            shared_a, shared_b, shared_c))
     }
+    pub fn as_slice(&self) -> &[u8] {
+        &self.0[..]
+    }
 }
 
 pub struct ServerToClientKey(secretbox::Key);
@@ -809,6 +818,9 @@ impl ServerToClientKey {
         ServerToClientKey(build_shared_key(&server_pk.0, net_id,
                                            shared_a, shared_b, shared_c))
     }
+    pub fn as_slice(&self) -> &[u8] {
+        &self.0[..]
+    }
 }
 
 struct NonceGen {
@@ -816,7 +828,7 @@ struct NonceGen {
 }
 
 impl NonceGen {
-    fn new(pk: &PublicKey, net_id: &NetworkId) -> NonceGen {
+    fn new(pk: &CurvePublicKey, net_id: &NetworkId) -> NonceGen {
         let hmac = auth::authenticate(&pk[..], &net_id.0);
         const N: usize = size_of::<secretbox::Nonce>();
         NonceGen {
@@ -846,8 +858,8 @@ impl ClientToServerNonce {
 }
 pub struct ClientToServerNonceGen(NonceGen);
 impl ClientToServerNonceGen {
-    pub fn new(server_pk: &ServerPublicKey, net_id: &NetworkId) -> ClientToServerNonceGen {
-        ClientToServerNonceGen(NonceGen::new(&server_pk.0, net_id))
+    pub fn new(server_eph_pk: &ServerEphPublicKey, net_id: &NetworkId) -> ClientToServerNonceGen {
+        ClientToServerNonceGen(NonceGen::new(&server_eph_pk.0, net_id))
     }
 
     #[must_use]
@@ -865,8 +877,8 @@ impl ServerToClientNonce {
 
 pub struct ServerToClientNonceGen(NonceGen);
 impl ServerToClientNonceGen {
-    pub fn new(client_pk: &ClientPublicKey, net_id: &NetworkId) -> ServerToClientNonceGen {
-        ServerToClientNonceGen(NonceGen::new(&client_pk.0, net_id))
+    pub fn new(client_eph_pk: &ClientEphPublicKey, net_id: &NetworkId) -> ServerToClientNonceGen {
+        ServerToClientNonceGen(NonceGen::new(&client_eph_pk.0, net_id))
     }
 
     #[must_use]
