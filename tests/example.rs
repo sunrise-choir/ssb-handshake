@@ -6,7 +6,7 @@ use shs_core::*;
 fn client(to_server: Sender<Vec<u8>>, from_server: Receiver<Vec<u8>>,
           server_pk: ServerPublicKey) {
 
-    let net_id = NetworkId::ssb_main_network();
+    let net_id = NetworkId::SSB_MAIN_NET;
     let (pk, sk) = client::generate_longterm_keypair();
     let (eph_pk, eph_sk) = client::generate_eph_keypair();
 
@@ -54,7 +54,7 @@ fn client(to_server: Sender<Vec<u8>>, from_server: Receiver<Vec<u8>>,
 
 fn server(to_client: Sender<Vec<u8>>, from_client: Receiver<Vec<u8>>,
           pk: ServerPublicKey, sk: ServerSecretKey) {
-    let net_id = NetworkId::ssb_main_network();
+    let net_id = NetworkId::SSB_MAIN_NET;
     let (eph_pk, eph_sk) = server::generate_eph_keypair();
 
     // Receive and verify client hello
