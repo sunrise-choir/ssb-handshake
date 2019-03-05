@@ -21,7 +21,7 @@ fn main() {
 
     // Receive and verify client hello
     let client_eph_pk = {
-        let mut buf = [0u8; 64];
+        let mut buf = [0u8; ClientHello::size()];
         stdin().read_exact(&mut buf).unwrap();
         let client_hello = ClientHello::from_slice(&buf).unwrap();
         client_hello.verify(&net_id).unwrap()
@@ -38,7 +38,7 @@ fn main() {
 
     // Receive and verify client auth
     let (client_sig, client_pk) = {
-        let mut buf = [0u8; 112];
+        let mut buf = [0u8; ClientAuth::size()];
         stdin().read_exact(&mut buf).unwrap();
 
         let client_auth = ClientAuth::from_buffer(buf.to_vec()).unwrap();

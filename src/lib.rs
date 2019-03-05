@@ -81,6 +81,10 @@ impl NetworkId {
     pub fn from_slice(b: &[u8]) -> Option<NetworkId> {
         Some(NetworkId(AuthKey::from_slice(b)?))
     }
+
+    pub const fn size() -> usize {
+        32
+    }
 }
 
 
@@ -123,6 +127,10 @@ pub struct ClientHello {
 }
 
 impl ClientHello {
+    pub const fn size() -> usize {
+        size_of::<ClientHello>()
+    }
+
     // concat(nacl_auth(msg: client_ephemeral_pk,
     //                  key: network_identifier),
     //        client_ephemeral_pk)
@@ -175,7 +183,7 @@ pub struct ServerHello {
 }
 
 impl ServerHello {
-    pub const fn buffer_size() -> usize {
+    pub const fn size() -> usize {
         size_of::<ServerHello>()
     }
 
@@ -283,6 +291,9 @@ impl SharedB {
 /// ## Message 3 (Client to Server)
 pub struct ClientAuth(Vec<u8>);
 impl ClientAuth {
+    pub const fn size() -> usize {
+        112
+    }
 
     // detached_signature_A = nacl_sign_detached(
     //   msg: concat(
@@ -459,6 +470,10 @@ impl SharedC {
 /// ## Message 4 (Server to Client)
 pub struct ServerAccept(Vec<u8>);
 impl ServerAccept {
+    pub const fn size() -> usize {
+        80
+    }
+
     pub fn new(sk: &ServerSecretKey, client_pk: &ClientPublicKey,
            net_id: &NetworkId, client_sig: &ClientSignature,
            shared_a: &SharedA, shared_b: &SharedB,

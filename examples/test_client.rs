@@ -22,12 +22,11 @@ fn main() {
 
     // Send client hello
     let hello = ClientHello::new(&eph_pk, &net_id);
-    assert_eq!(hello.as_slice().len(), 64);
     stdout().write(hello.as_slice()).unwrap();
     stdout().flush().unwrap();
 
     let server_eph_pk = {
-        let mut buf = [0u8; 64];
+        let mut buf = [0u8; ServerHello::size()];
         stdin().read_exact(&mut buf).unwrap();
         let server_hello = ServerHello::from_slice(&buf).unwrap();
         server_hello.verify(&net_id).unwrap()
@@ -39,7 +38,6 @@ fn main() {
 
     // Send client auth
     let client_auth = ClientAuth::new(&sk, &pk, &server_pk, &net_id, &shared_a, &shared_b);
-    assert_eq!(client_auth.as_slice().len(), 112);
     stdout().write(client_auth.as_slice()).unwrap();
     stdout().flush().unwrap();
 
@@ -47,7 +45,7 @@ fn main() {
     let shared_c = SharedC::client_side(&sk, &server_eph_pk).unwrap();
 
     let ok = {
-        let mut buf = [0u8; 80];
+        let mut buf = [0u8; ServerAccept::size()];
         stdin().read_exact(&mut buf).unwrap();
         let server_acc = ServerAccept::from_buffer(buf.to_vec()).unwrap();
         server_acc.open_and_verify(&sk, &pk, &server_pk,
