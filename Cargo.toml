@@ -1,6 +1,6 @@
 [package]
 name = "shs_core"
-version = "0.2.0"
+version = "0.2.1"
 authors = ["sean billig <sean.billig@gmail.com>"]
 edition = "2018"
 license = "AGPL-3.0"
@@ -11,8 +11,8 @@ readme = "README.md"
 keywords = ["secret-handshake", "handshake", "ssb", "scuttlebutt", "crypto"]
 
 [dependencies]
-sodiumoxide = "0.2.0"
-libsodium-sys = "0.2.0"
+sodiumoxide = "0.2"
+libsodium-sys = "0.2"
 
 [dev-dependencies]
 criterion = "~0.2.10"

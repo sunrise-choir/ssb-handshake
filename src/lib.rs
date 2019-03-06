@@ -745,12 +745,12 @@ impl ServerToClientKey {
     }
 }
 
-struct NonceGen {
+pub struct NonceGen {
     next_nonce: secretbox::Nonce
 }
 
 impl NonceGen {
-    fn new(pk: &CurvePublicKey, net_id: &NetworkId) -> NonceGen {
+    pub fn new(pk: &CurvePublicKey, net_id: &NetworkId) -> NonceGen {
         let hmac = auth::authenticate(&pk[..], &net_id.0);
         const N: usize = size_of::<secretbox::Nonce>();
         NonceGen {
@@ -758,7 +758,7 @@ impl NonceGen {
         }
     }
 
-    fn next(&mut self) -> secretbox::Nonce {
+    pub fn next(&mut self) -> secretbox::Nonce {
         let n = self.next_nonce.clone();
 
         // Increment the nonce as a big-endian u24
@@ -791,6 +791,10 @@ impl ClientToServerNonceGen {
     pub fn next(&mut self) -> ClientToServerNonce {
         ClientToServerNonce(self.0.next())
     }
+
+    pub fn into_inner(self) -> NonceGen {
+        self.0
+    }
 }
 
 /// Nonce for a server-to-client secret box
@@ -811,6 +815,10 @@ impl ServerToClientNonceGen {
     #[must_use]
     pub fn next(&mut self) -> ServerToClientNonce {
         ServerToClientNonce(self.0.next())
+    }
+
+    pub fn into_inner(self) -> NonceGen {
+        self.0
     }
 }
 
