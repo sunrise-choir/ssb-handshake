@@ -814,6 +814,13 @@ impl ServerToClientNonceGen {
     }
 }
 
+pub struct HandshakeOutcome {
+    pub c2s_key:      ClientToServerKey,
+    pub s2c_key:      ServerToClientKey,
+    pub c2s_noncegen: ClientToServerNonceGen,
+    pub s2c_noncegen: ServerToClientNonceGen,
+}
+
 
 fn zero_nonce() -> secretbox::Nonce {
     secretbox::Nonce::from_slice(&[0u8; size_of::<secretbox::Nonce>()]) .unwrap()

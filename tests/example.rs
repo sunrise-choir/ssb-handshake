@@ -4,7 +4,7 @@ use std::thread;
 use shs_core::*;
 
 fn client(to_server: Sender<Vec<u8>>, from_server: Receiver<Vec<u8>>,
-          server_pk: ServerPublicKey) -> Result<(), HandshakeError> {
+          server_pk: ServerPublicKey) -> Result<HandshakeOutcome, HandshakeError> {
 
     let net_id = NetworkId::SSB_MAIN_NET;
     let (pk, sk) = client::generate_longterm_keypair();
@@ -37,22 +37,17 @@ fn client(to_server: Sender<Vec<u8>>, from_server: Receiver<Vec<u8>>,
                                &net_id, &shared_a,
                                &shared_b, &shared_c)?;
 
-    // Derive shared keys for box streams
-    let _c2s_key = ClientToServerKey::new(&server_pk, &net_id, &shared_a, &shared_b, &shared_c);
-    let _s2c_key = ServerToClientKey::new(&pk, &net_id, &shared_a, &shared_b, &shared_c);
-
-    let mut c2s_nonces = ClientToServerNonceGen::new(&server_eph_pk, &net_id);
-    let mut s2c_nonces = ServerToClientNonceGen::new(&eph_pk, &net_id);
-
-    let _n = c2s_nonces.next();
-    let _n = s2c_nonces.next();
-
-    Ok(())
+    Ok(HandshakeOutcome {
+        c2s_key: ClientToServerKey::new(&server_pk, &net_id, &shared_a, &shared_b, &shared_c),
+        s2c_key: ServerToClientKey::new(&pk, &net_id, &shared_a, &shared_b, &shared_c),
+        c2s_noncegen: ClientToServerNonceGen::new(&server_eph_pk, &net_id),
+        s2c_noncegen: ServerToClientNonceGen::new(&eph_pk, &net_id),
+    })
 }
 
 fn server(to_client: Sender<Vec<u8>>, from_client: Receiver<Vec<u8>>,
           pk: ServerPublicKey, sk: ServerSecretKey)
-          -> Result<(), HandshakeError> {
+          -> Result<HandshakeOutcome, HandshakeError> {
 
     let net_id = NetworkId::SSB_MAIN_NET;
     let (eph_pk, eph_sk) = server::generate_eph_keypair();
@@ -87,18 +82,13 @@ fn server(to_client: Sender<Vec<u8>>, from_client: Receiver<Vec<u8>>,
                                       &shared_a, &shared_b, &shared_c);
     to_client.send(server_acc.to_vec()).unwrap();
 
+    Ok(HandshakeOutcome {
+        c2s_key: ClientToServerKey::new(&pk, &net_id, &shared_a, &shared_b, &shared_c),
+        s2c_key: ServerToClientKey::new(&client_pk, &net_id, &shared_a, &shared_b, &shared_c),
+        c2s_noncegen: ClientToServerNonceGen::new(&eph_pk, &net_id),
+        s2c_noncegen: ServerToClientNonceGen::new(&client_eph_pk, &net_id),
+    })
 
-    // Derive shared keys for box streams
-    let _c2s_key = ClientToServerKey::new(&pk, &net_id, &shared_a, &shared_b, &shared_c);
-    let _s2c_key = ServerToClientKey::new(&client_pk, &net_id, &shared_a, &shared_b, &shared_c);
-
-    let mut c2s_nonces = ClientToServerNonceGen::new(&eph_pk, &net_id);
-    let mut s2c_nonces = ServerToClientNonceGen::new(&client_eph_pk, &net_id);
-
-    let _n = c2s_nonces.next();
-    let _n = s2c_nonces.next();
-
-    Ok(())
 }
 
 
@@ -116,8 +106,17 @@ fn ok() -> Result<(), HandshakeError> {
     let client_thread = thread::spawn(move|| client(c2s_sender, s2c_receiver, server_pk_copy));
     let server_thread = thread::spawn(move|| server(s2c_sender, c2s_receiver, server_pk, server_sk));
 
-    client_thread.join().unwrap()?;
-    server_thread.join().unwrap()?;
+    let mut cout = client_thread.join().unwrap()?;
+    let mut sout = server_thread.join().unwrap()?;
+
+    assert_eq!(cout.c2s_key.as_slice(), sout.c2s_key.as_slice());
+    assert_eq!(cout.s2c_key.as_slice(), sout.s2c_key.as_slice());
+
+    assert_eq!(cout.c2s_noncegen.next().as_slice(),
+               sout.c2s_noncegen.next().as_slice());
+
+    assert_eq!(cout.s2c_noncegen.next().as_slice(),
+               sout.s2c_noncegen.next().as_slice());
 
     Ok(())
 }
