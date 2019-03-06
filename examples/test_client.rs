@@ -7,7 +7,7 @@ use hex::FromHex;
 
 // For use with https://github.com/AljoschaMeyer/shs1-testsuite
 // cargo run --example test_client d4a1cb88a66f02f8db635ce26441cc5dac1b08420ceaac230839b755845a9ffb 4fe84c0c552740abc0efa893916a56f7cb7f42d8c8f606f4c41d8125613f8cc6
-fn main() {
+fn main() -> Result<(), HandshakeError> {
     let args: Vec<String> = env::args().collect();
     if args.len() != 3 {
         println!("Usage: test_client net_id_as_hex server_pk_as_hex");
@@ -44,15 +44,12 @@ fn main() {
     // Derive shared secret
     let shared_c = SharedC::client_side(&sk, &server_eph_pk).unwrap();
 
-    let ok = {
-        let mut buf = [0u8; ServerAccept::size()];
-        stdin().read_exact(&mut buf).unwrap();
-        let server_acc = ServerAccept::from_buffer(buf.to_vec()).unwrap();
-        server_acc.open_and_verify(&sk, &pk, &server_pk,
-                                   &net_id, &shared_a,
-                                   &shared_b, &shared_c)
-    };
-    assert!(ok);
+    let mut buf = [0u8; ServerAccept::size()];
+    stdin().read_exact(&mut buf).unwrap();
+    let server_acc = ServerAccept::from_buffer(buf.to_vec())?;
+    server_acc.open_and_verify(&sk, &pk, &server_pk,
+                               &net_id, &shared_a,
+                               &shared_b, &shared_c)?;
 
     // encryption_key, encryption_nonce, decryption_key and decryption_nonce
     // // Derive shared keys for box streams
@@ -70,4 +67,6 @@ fn main() {
 
     stdout().write(&v).unwrap();
     stdout().flush().unwrap();
+
+    Ok(())
 }

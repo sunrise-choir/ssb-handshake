@@ -6,6 +6,7 @@
 extern crate libsodium_sys;
 extern crate sodiumoxide;
 
+use std::io;
 use std::slice;
 use std::mem::size_of;
 
@@ -23,11 +24,52 @@ use sodiumoxide::crypto::hash::sha256::{hash, Digest as ShaDigest};
 use libsodium_sys::{crypto_sign_ed25519_pk_to_curve25519,
                     crypto_sign_ed25519_sk_to_curve25519};
 
+#[derive(Debug)]
+pub enum HandshakeError {
+    Io(io::Error),
+
+    ClientHelloDeserializeFailed,
+    ClientHelloVerifyFailed,
+
+    ServerHelloDeserializeFailed,
+    ServerHelloVerifyFailed,
+
+    ClientAuthDeserializeFailed,
+    ClientAuthOpenFailed,
+    ClientAuthVerifyFailed,
+
+    ServerAcceptDeserializeFailed,
+    ServerAcceptOpenFailed,
+    ServerAcceptVerifyFailed,
+
+    SharedAInvalid,
+    SharedBInvalid,
+    SharedCInvalid,
+}
+impl From<io::Error> for HandshakeError {
+    fn from(err: io::Error) -> HandshakeError {
+        HandshakeError::Io(err)
+    }
+}
+
+use HandshakeError::*;
+
 /// Client long-term public key
 #[derive(Clone)]
 pub struct ClientPublicKey(PublicKey);
+impl ClientPublicKey {
+    pub fn from_slice(b: &[u8]) -> Option<ClientPublicKey> {
+        Some(ClientPublicKey(PublicKey::from_slice(b)?))
+    }
+}
+
 /// Client long-term secret key
 pub struct ClientSecretKey(SecretKey);
+impl ClientSecretKey {
+    pub fn from_slice(b: &[u8]) -> Option<ClientSecretKey> {
+        Some(ClientSecretKey(SecretKey::from_slice(b)?))
+    }
+}
 
 /// Server long-term public key; known to client prior to the handshake
 #[derive(Clone)]
@@ -143,15 +185,20 @@ impl ClientHello {
 
     // client_hmac = first_32_bytes(msg1)
     // client_ephemeral_pk = last_32_bytes(msg1)
-    pub fn from_slice(b: &[u8]) -> Option<ClientHello> {
+    pub fn from_slice(b: &[u8]) -> Result<ClientHello, HandshakeError> {
         if b.len() == size_of::<ClientHello>() {
             let (hmac_bytes, pk_bytes) = b.split_at(size_of::<HmacAuthTag>());
-            Some(ClientHello {
-                hmac: HmacAuthTag::from_slice(&hmac_bytes)?,
-                eph_pk: ClientEphPublicKey(CurvePublicKey::from_slice(&pk_bytes)?),
+
+            Ok(ClientHello {
+                hmac: HmacAuthTag::from_slice(&hmac_bytes)
+                    .ok_or(HandshakeError::ClientHelloDeserializeFailed)?,
+
+                eph_pk: ClientEphPublicKey(
+                    CurvePublicKey::from_slice(&pk_bytes)
+                        .ok_or(HandshakeError::ClientHelloDeserializeFailed)?),
             })
         } else {
-            None
+            Err(HandshakeError::ClientHelloDeserializeFailed)
         }
     }
 
@@ -159,11 +206,11 @@ impl ClientHello {
     //   authenticator: client_hmac,
     //   msg: client_ephemeral_pk,
     //   key: network_identifier)
-    pub fn verify(&self, net_id: &NetworkId) -> Option<ClientEphPublicKey> {
+    pub fn verify(&self, net_id: &NetworkId) -> Result<ClientEphPublicKey, HandshakeError> {
         if auth::verify(&self.hmac, &self.eph_pk.0[..], &net_id.0) {
-            Some(self.eph_pk.clone())
+            Ok(self.eph_pk.clone())
         } else {
-            None
+            Err(HandshakeError::ClientHelloVerifyFailed)
         }
     }
 
@@ -199,15 +246,18 @@ impl ServerHello {
 
     // server_hmac = first_32_bytes(msg2)
     // server_ephemeral_pk = last_32_bytes(msg2)
-    pub fn from_slice(b: &[u8]) -> Option<ServerHello> {
+    pub fn from_slice(b: &[u8]) -> Result<ServerHello, HandshakeError> {
         if b.len() == size_of::<ServerHello>() {
             let (hmac_bytes, pk_bytes) = b.split_at(size_of::<HmacAuthTag>());
-            Some(ServerHello {
-                hmac: HmacAuthTag::from_slice(&hmac_bytes)?,
-                eph_pk: ServerEphPublicKey(CurvePublicKey::from_slice(&pk_bytes)?),
+            Ok(ServerHello {
+                hmac: HmacAuthTag::from_slice(&hmac_bytes)
+                    .ok_or(HandshakeError::ServerHelloDeserializeFailed)?,
+                eph_pk: ServerEphPublicKey(
+                    CurvePublicKey::from_slice(&pk_bytes)
+                        .ok_or(HandshakeError::ServerHelloDeserializeFailed)?),
             })
         } else {
-            None
+            Err(HandshakeError::ServerHelloDeserializeFailed)
         }
     }
 
@@ -216,11 +266,11 @@ impl ServerHello {
     //   msg: server_ephemeral_pk,
     //   key: network_identifier
     // )
-    pub fn verify(&self, net_id: &NetworkId) -> Option<ServerEphPublicKey> {
+    pub fn verify(&self, net_id: &NetworkId) -> Result<ServerEphPublicKey, HandshakeError> {
         if auth::verify(&self.hmac, &self.eph_pk.0[..], &net_id.0) {
-            Some(self.eph_pk.clone())
+            Ok(self.eph_pk.clone())
         } else {
-            None
+            Err(HandshakeError::ServerHelloVerifyFailed)
         }
     }
 
@@ -242,16 +292,22 @@ impl SharedA {
     //   client_ephemeral_sk,
     //   server_ephemeral_pk
     // )
-    pub fn client_side(sk: &ClientEphSecretKey, pk: &ServerEphPublicKey) -> Option<SharedA> {
-        Some(SharedA(derive_shared_secret(&sk.0, &pk.0)?))
+    pub fn client_side(sk: &ClientEphSecretKey, pk: &ServerEphPublicKey)
+                       -> Result<SharedA, HandshakeError> {
+        derive_shared_secret(&sk.0, &pk.0)
+            .map(SharedA)
+            .ok_or(HandshakeError::SharedAInvalid)
     }
 
     // shared_secret_ab = nacl_scalarmult(
     //   server_ephemeral_sk,
     //   client_ephemeral_pk
     // )
-    pub fn server_side(sk: &ServerEphSecretKey, pk: &ClientEphPublicKey) -> Option<SharedA> {
-        Some(SharedA(derive_shared_secret(&sk.0, &pk.0)?))
+    pub fn server_side(sk: &ServerEphSecretKey, pk: &ClientEphPublicKey)
+                       -> Result<SharedA, HandshakeError> {
+        derive_shared_secret(&sk.0, &pk.0)
+            .map(SharedA)
+            .ok_or(HandshakeError::SharedAInvalid)
     }
 
     fn hash(&self) -> SharedAHash {
@@ -271,9 +327,12 @@ impl SharedB {
     //   pk_to_curve25519(server_longterm_pk)
     // )
     pub fn client_side(sk: &ClientEphSecretKey, pk: &ServerPublicKey)
-                   -> Option<SharedB>
+                   -> Result<SharedB, HandshakeError>
     {
-        Some(SharedB(derive_shared_secret(&sk.0, &pk_to_curve(&pk.0)?)?))
+        pk_to_curve(&pk.0)
+            .and_then(|c| derive_shared_secret(&sk.0, &c))
+            .map(SharedB)
+            .ok_or(HandshakeError::SharedBInvalid)
     }
 
     // shared_secret_aB = nacl_scalarmult(
@@ -281,9 +340,12 @@ impl SharedB {
     //   client_ephemeral_pk
     // )
     pub fn server_side(sk: &ServerSecretKey, pk: &ClientEphPublicKey)
-                   -> Option<SharedB>
+                   -> Result<SharedB, HandshakeError>
     {
-        Some(SharedB(derive_shared_secret(&sk_to_curve(&sk.0)?, &pk.0)?))
+        sk_to_curve(&sk.0)
+            .and_then(|c| derive_shared_secret(&c, &pk.0))
+            .map(SharedB)
+            .ok_or(HandshakeError::SharedBInvalid)
     }
 }
 
@@ -337,11 +399,11 @@ impl ClientAuth {
         ClientAuth(v)
     }
 
-    pub fn from_buffer(b: Vec<u8>) -> Option<ClientAuth> {
-        if b.len() == 112 { // TODO
-            Some(ClientAuth(b))
+    pub fn from_buffer(b: Vec<u8>) -> Result<ClientAuth, HandshakeError> {
+        if b.len() == ClientAuth::size() {
+            Ok(ClientAuth(b))
         } else {
-            None
+            Err(HandshakeError::ClientAuthDeserializeFailed)
         }
     }
 
@@ -350,7 +412,7 @@ impl ClientAuth {
                            net_id: &NetworkId,
                            shared_a: &SharedA,
                            shared_b: &SharedB)
-                           -> Option<(ClientSignature, ClientPublicKey)> {
+                           -> Result<(ClientSignature, ClientPublicKey), HandshakeError> {
 
         // TODO: return Result<_, ClientAuthUnsealError>
         // Open the box
@@ -360,17 +422,18 @@ impl ClientAuth {
                 shared_a: shared_a.clone(),
                 shared_b: shared_b.clone(),
             }.as_key();
-            let v = secretbox::open(&self.0, &zero_nonce(), &key).ok()?;
+            let v = secretbox::open(&self.0, &zero_nonce(), &key)
+                .map_err(|_| HandshakeError::ClientAuthOpenFailed)?;
             ClientAuthPayload::from_slice(&v)
-        }?;
+                .ok_or(ClientAuthVerifyFailed)?
+        };
 
         let ok = ClientAuthSignData::new(net_id, server_pk, shared_a)
-                   .verify(&payload.client_sig,
-                           &payload.client_pk);
+                   .verify(&payload.client_sig, &payload.client_pk);
         if ok {
-            Some((payload.client_sig, payload.client_pk))
+            Ok((payload.client_sig, payload.client_pk))
         } else {
-            None
+            Err(HandshakeError::ClientAuthVerifyFailed)
         }
     }
 
@@ -456,13 +519,19 @@ pub struct SharedC(GroupElement);
 impl SharedC {
 
     pub fn client_side(sk: &ClientSecretKey, pk: &ServerEphPublicKey)
-                   -> Option<SharedC> {
-        Some(SharedC(derive_shared_secret(&sk_to_curve(&sk.0)?, &pk.0)?))
+                       -> Result<SharedC, HandshakeError> {
+        sk_to_curve(&sk.0)
+            .and_then(|c| derive_shared_secret(&c, &pk.0))
+            .map(SharedC)
+            .ok_or(HandshakeError::SharedCInvalid)
     }
 
     pub fn server_side(sk: &ServerEphSecretKey, pk: &ClientPublicKey)
-                   -> Option<SharedC> {
-        Some(SharedC(derive_shared_secret(&sk.0, &pk_to_curve(&pk.0)?)?))
+                       -> Result<SharedC, HandshakeError> {
+        pk_to_curve(&pk.0)
+            .and_then(|c| derive_shared_secret(&sk.0, &c))
+            .map(SharedC)
+            .ok_or(HandshakeError::SharedCInvalid)
     }
 }
 
@@ -498,11 +567,11 @@ impl ServerAccept {
         ServerAccept(secretbox::seal(&sig.0[..], &zero_nonce(), &key))
     }
 
-    pub fn from_buffer(b: Vec<u8>) -> Option<ServerAccept> {
-        if b.len() == 80 { // TODO
-            Some(ServerAccept(b))
+    pub fn from_buffer(b: Vec<u8>) -> Result<ServerAccept, HandshakeError> {
+        if b.len() == ServerAccept::size() {
+            Ok(ServerAccept(b))
         } else {
-            None
+            Err(ServerAcceptDeserializeFailed)
         }
     }
 
@@ -515,7 +584,7 @@ impl ServerAccept {
                            shared_a: &SharedA,
                            shared_b: &SharedB,
                            shared_c: &SharedC)
-                           -> bool
+                           -> Result<(), HandshakeError>
     {
         let server_sig = {
             let key = ServerAcceptKeyData {
@@ -525,18 +594,25 @@ impl ServerAccept {
                 shared_c: shared_c.clone(),
             }.as_key();
 
-            let v = secretbox::open(&self.0, &zero_nonce(), &key).unwrap();
-            ServerSignature(Signature::from_slice(&v).unwrap())
+            let v = secretbox::open(&self.0, &zero_nonce(), &key)
+                .map_err(|_| ServerAcceptOpenFailed)?;
+
+            ServerSignature(Signature::from_slice(&v).ok_or(ServerAcceptVerifyFailed)?)
         };
         // Note: this sig is computed earlier in ClientAuth::new(); could be stored.
         let client_sig = ClientAuthSignData::new(net_id, server_pk, shared_a).sign(&client_sk);
 
-        ServerAcceptSignData {
+        let ok = ServerAcceptSignData {
             net_id: net_id.clone(),
             sig: client_sig,
             client_pk: client_pk.clone(),
             hash: shared_a.hash()
-        }.verify(&server_sig, server_pk)
+        }.verify(&server_sig, server_pk);
+        if ok {
+            Ok(())
+        } else {
+            Err(ServerAcceptVerifyFailed)
+        }
     }
 
     pub fn as_slice(&self) -> &[u8] {

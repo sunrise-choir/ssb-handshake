@@ -4,7 +4,7 @@ use std::thread;
 use shs_core::*;
 
 fn client(to_server: Sender<Vec<u8>>, from_server: Receiver<Vec<u8>>,
-          server_pk: ServerPublicKey) {
+          server_pk: ServerPublicKey) -> Result<(), HandshakeError> {
 
     let net_id = NetworkId::SSB_MAIN_NET;
     let (pk, sk) = client::generate_longterm_keypair();
@@ -16,13 +16,13 @@ fn client(to_server: Sender<Vec<u8>>, from_server: Receiver<Vec<u8>>,
 
     let server_eph_pk = {
         let buf = from_server.recv().unwrap();
-        let server_hello = ServerHello::from_slice(&buf).unwrap();
-        server_hello.verify(&net_id).unwrap()
+        let server_hello = ServerHello::from_slice(&buf)?;
+        server_hello.verify(&net_id)?
     };
 
     // Derive shared secrets
-    let shared_a = SharedA::client_side(&eph_sk, &server_eph_pk).unwrap();
-    let shared_b = SharedB::client_side(&eph_sk, &server_pk).unwrap();
+    let shared_a = SharedA::client_side(&eph_sk, &server_eph_pk)?;
+    let shared_b = SharedB::client_side(&eph_sk, &server_pk)?;
 
     // Send client auth
     let client_auth = ClientAuth::new(&sk, &pk, &server_pk, &net_id, &shared_a, &shared_b);
@@ -31,14 +31,11 @@ fn client(to_server: Sender<Vec<u8>>, from_server: Receiver<Vec<u8>>,
     // Derive shared secret
     let shared_c = SharedC::client_side(&sk, &server_eph_pk).unwrap();
 
-    let ok = {
-        let v = from_server.recv().unwrap();
-        let server_acc = ServerAccept::from_buffer(v).unwrap();
-        server_acc.open_and_verify(&sk, &pk, &server_pk,
-                                   &net_id, &shared_a,
-                                   &shared_b, &shared_c)
-    };
-    assert!(ok);
+    let v = from_server.recv().unwrap();
+    let server_acc = ServerAccept::from_buffer(v).unwrap();
+    server_acc.open_and_verify(&sk, &pk, &server_pk,
+                               &net_id, &shared_a,
+                               &shared_b, &shared_c)?;
 
     // Derive shared keys for box streams
     let _c2s_key = ClientToServerKey::new(&server_pk, &net_id, &shared_a, &shared_b, &shared_c);
@@ -50,10 +47,13 @@ fn client(to_server: Sender<Vec<u8>>, from_server: Receiver<Vec<u8>>,
     let _n = c2s_nonces.next();
     let _n = s2c_nonces.next();
 
+    Ok(())
 }
 
 fn server(to_client: Sender<Vec<u8>>, from_client: Receiver<Vec<u8>>,
-          pk: ServerPublicKey, sk: ServerSecretKey) {
+          pk: ServerPublicKey, sk: ServerSecretKey)
+          -> Result<(), HandshakeError> {
+
     let net_id = NetworkId::SSB_MAIN_NET;
     let (eph_pk, eph_sk) = server::generate_eph_keypair();
 
@@ -97,11 +97,13 @@ fn server(to_client: Sender<Vec<u8>>, from_client: Receiver<Vec<u8>>,
 
     let _n = c2s_nonces.next();
     let _n = s2c_nonces.next();
+
+    Ok(())
 }
 
 
 #[test]
-fn ok() {
+fn ok() -> Result<(), HandshakeError> {
 
     let (c2s_sender, c2s_receiver) = channel();
     let (s2c_sender, s2c_receiver) = channel();
@@ -114,7 +116,8 @@ fn ok() {
     let client_thread = thread::spawn(move|| client(c2s_sender, s2c_receiver, server_pk_copy));
     let server_thread = thread::spawn(move|| server(s2c_sender, c2s_receiver, server_pk, server_sk));
 
-    client_thread.join().unwrap();
-    server_thread.join().unwrap();
+    client_thread.join().unwrap()?;
+    server_thread.join().unwrap()?;
 
+    Ok(())
 }
