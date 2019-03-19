@@ -55,8 +55,8 @@ fn server(to_client: Sender<Vec<u8>>, from_client: Receiver<Vec<u8>>,
     // Receive and verify client hello
     let client_eph_pk = {
         let buf = from_client.recv().unwrap();
-        let client_hello = ClientHello::from_slice(&buf).unwrap();
-        client_hello.verify(&net_id).unwrap()
+        let client_hello = ClientHello::from_slice(&buf)?;
+        client_hello.verify(&net_id)?
     };
 
     // Send server hello
@@ -64,18 +64,18 @@ fn server(to_client: Sender<Vec<u8>>, from_client: Receiver<Vec<u8>>,
     to_client.send(hello.to_vec()).unwrap();
 
     // Derive shared secrets
-    let shared_a = SharedA::server_side(&eph_sk, &client_eph_pk).unwrap();
-    let shared_b = SharedB::server_side(&sk, &client_eph_pk).unwrap();
+    let shared_a = SharedA::server_side(&eph_sk, &client_eph_pk)?;
+    let shared_b = SharedB::server_side(&sk, &client_eph_pk)?;
 
     // Receive and verify client auth
     let (client_sig, client_pk) = {
         let v = from_client.recv().unwrap();
-        let client_auth = ClientAuth::from_buffer(v).unwrap();
-        client_auth.open_and_verify(&pk, &net_id, &shared_a, &shared_b).unwrap()
+        let client_auth = ClientAuth::from_buffer(v)?;
+        client_auth.open_and_verify(&pk, &net_id, &shared_a, &shared_b)?
     };
 
     // Derive shared secret
-    let shared_c = SharedC::server_side(&eph_sk, &client_pk).unwrap();
+    let shared_c = SharedC::server_side(&eph_sk, &client_pk)?;
 
     // Send server accept
     let server_acc = ServerAccept::new(&sk, &client_pk, &net_id, &client_sig,

@@ -16,6 +16,7 @@ use auth::{Key as AuthKey, Tag as HmacAuthTag};
 use box_::{PublicKey as CurvePublicKey, SecretKey as CurveSecretKey};
 use sign::{sign_detached, verify_detached, PublicKey, SecretKey, Signature};
 use scalarmult::{scalarmult, Scalar, GroupElement};
+use secretbox::Nonce;
 
 use sodiumoxide::crypto::hash::sha256::{hash, Digest as ShaDigest};
 // use sodiumoxide::utils::memzero;
@@ -206,7 +207,7 @@ impl ClientHello {
     //   authenticator: client_hmac,
     //   msg: client_ephemeral_pk,
     //   key: network_identifier)
-    pub fn verify(&self, net_id: &NetworkId) -> Result<ClientEphPublicKey, HandshakeError> {
+    pub fn verify(self, net_id: &NetworkId) -> Result<ClientEphPublicKey, HandshakeError> {
         if auth::verify(&self.hmac, &self.eph_pk.0[..], &net_id.0) {
             Ok(self.eph_pk.clone())
         } else {
@@ -266,7 +267,7 @@ impl ServerHello {
     //   msg: server_ephemeral_pk,
     //   key: network_identifier
     // )
-    pub fn verify(&self, net_id: &NetworkId) -> Result<ServerEphPublicKey, HandshakeError> {
+    pub fn verify(self, net_id: &NetworkId) -> Result<ServerEphPublicKey, HandshakeError> {
         if auth::verify(&self.hmac, &self.eph_pk.0[..], &net_id.0) {
             Ok(self.eph_pk.clone())
         } else {
@@ -394,7 +395,7 @@ impl ClientAuth {
             net_id: net_id.clone(),
             shared_a: shared_a.clone(),
             shared_b: shared_b.clone(),
-        }.as_key();
+        }.into_key();
         let v = secretbox::seal(payload.as_slice(), &zero_nonce(), &key);
         ClientAuth(v)
     }
@@ -407,7 +408,7 @@ impl ClientAuth {
         }
     }
 
-    pub fn open_and_verify(&self,
+    pub fn open_and_verify(self,
                            server_pk: &ServerPublicKey,
                            net_id: &NetworkId,
                            shared_a: &SharedA,
@@ -421,7 +422,7 @@ impl ClientAuth {
                 net_id: net_id.clone(),
                 shared_a: shared_a.clone(),
                 shared_b: shared_b.clone(),
-            }.as_key();
+            }.into_key();
             let v = secretbox::open(&self.0, &zero_nonce(), &key)
                 .map_err(|_| HandshakeError::ClientAuthOpenFailed)?;
             ClientAuthPayload::from_slice(&v)
@@ -461,11 +462,11 @@ impl ClientAuthSignData {
             hash: shared_a.hash(),
         }
     }
-    fn sign(&self, sk: &ClientSecretKey) -> ClientSignature {
+    fn sign(self, sk: &ClientSecretKey) -> ClientSignature {
         ClientSignature(sign_detached(self.as_slice(), &sk.0))
     }
 
-    fn verify(&self, sig: &ClientSignature, pk: &ClientPublicKey) -> bool {
+    fn verify(self, sig: &ClientSignature, pk: &ClientPublicKey) -> bool {
         verify_detached(&sig.0, self.as_slice(), &pk.0)
     }
 
@@ -482,8 +483,8 @@ struct ClientAuthKeyData {
     shared_b: SharedB,
 }
 impl ClientAuthKeyData {
-    fn as_key(&self) -> secretbox::Key {
-        let digest = unsafe { hash(bytes(self)) };
+    fn into_key(self) -> secretbox::Key {
+        let digest = unsafe { hash(bytes(&self)) };
         secretbox::Key::from_slice(&digest[..]).unwrap()
     }
 }
@@ -562,7 +563,7 @@ impl ServerAccept {
             shared_a: shared_a.clone(),
             shared_b: shared_b.clone(),
             shared_c: shared_c.clone(),
-        }.as_key();
+        }.into_key();
 
         ServerAccept(secretbox::seal(&sig.0[..], &zero_nonce(), &key))
     }
@@ -576,7 +577,7 @@ impl ServerAccept {
     }
 
     #[must_use]
-    pub fn open_and_verify(&self,
+    pub fn open_and_verify(self,
                            client_sk: &ClientSecretKey,
                            client_pk: &ClientPublicKey,
                            server_pk: &ServerPublicKey,
@@ -592,7 +593,7 @@ impl ServerAccept {
                 shared_a: shared_a.clone(),
                 shared_b: shared_b.clone(),
                 shared_c: shared_c.clone(),
-            }.as_key();
+            }.into_key();
 
             let v = secretbox::open(&self.0, &zero_nonce(), &key)
                 .map_err(|_| ServerAcceptOpenFailed)?;
@@ -632,11 +633,11 @@ struct ServerAcceptSignData {
 }
 
 impl ServerAcceptSignData {
-    fn sign(&self, sk: &ServerSecretKey) -> Signature {
+    fn sign(self, sk: &ServerSecretKey) -> Signature {
         sign_detached(self.as_slice(), &sk.0)
     }
 
-    fn verify(&self, sig: &ServerSignature, pk: &ServerPublicKey) -> bool {
+    fn verify(self, sig: &ServerSignature, pk: &ServerPublicKey) -> bool {
         verify_detached(&sig.0, self.as_slice(), &pk.0)
     }
 
@@ -653,8 +654,8 @@ struct ServerAcceptKeyData {
     shared_c: SharedC,
 }
 impl ServerAcceptKeyData {
-    fn as_key(&self) -> secretbox::Key {
-        let digest = unsafe { hash(bytes(self)) };
+    fn into_key(self) -> secretbox::Key {
+        let digest = unsafe { hash(bytes(&self)) };
         secretbox::Key::from_slice(&digest[..]).unwrap()
     }
 }
@@ -671,8 +672,8 @@ struct SharedKeyHashData {
     shared_c: SharedC,
 }
 impl SharedKeyHashData {
-    fn double_hash(&self) -> SharedKeyHash {
-        let h1 = unsafe { hash(bytes(self)) };
+    fn into_hash(self) -> SharedKeyHash {
+        let h1 = unsafe { hash(bytes(&self)) };
         SharedKeyHash(hash(&h1[..]))
     }
 }
@@ -683,8 +684,8 @@ struct SharedKeyData {
     pk: PublicKey,
 }
 impl SharedKeyData {
-    fn as_key(&self) -> secretbox::Key {
-        let digest = unsafe { hash(bytes(self)) };
+    fn into_key(self) -> secretbox::Key {
+        let digest = unsafe { hash(bytes(&self)) };
         secretbox::Key::from_slice(&digest[..]).unwrap()
     }
 }
@@ -703,12 +704,12 @@ fn build_shared_key(pk: &PublicKey,
         shared_a: shared_a.clone(),
         shared_b: shared_b.clone(),
         shared_c: shared_c.clone(),
-    }.double_hash();
+    }.into_hash();
 
     SharedKeyData {
         double_hash,
         pk: pk.clone(),
-    }.as_key()
+    }.into_key()
 }
 
 /// Final shared secret used to encrypt secret boxes (client to server)
@@ -746,19 +747,19 @@ impl ServerToClientKey {
 }
 
 pub struct NonceGen {
-    next_nonce: secretbox::Nonce
+    next_nonce: Nonce
 }
 
 impl NonceGen {
     pub fn new(pk: &CurvePublicKey, net_id: &NetworkId) -> NonceGen {
         let hmac = auth::authenticate(&pk[..], &net_id.0);
-        const N: usize = size_of::<secretbox::Nonce>();
+        const N: usize = size_of::<Nonce>();
         NonceGen {
-            next_nonce: secretbox::Nonce::from_slice(&hmac[..N]).unwrap()
+            next_nonce: Nonce::from_slice(&hmac[..N]).unwrap()
         }
     }
 
-    pub fn next(&mut self) -> secretbox::Nonce {
+    pub fn next(&mut self) -> Nonce {
         let n = self.next_nonce.clone();
 
         // Increment the nonce as a big-endian u24
@@ -773,7 +774,7 @@ impl NonceGen {
 }
 
 /// Nonce for a client-to-server secret box
-pub struct ClientToServerNonce(secretbox::Nonce);
+pub struct ClientToServerNonce(Nonce);
 impl ClientToServerNonce {
     pub fn as_slice(&self) -> &[u8] {
         &self.0[..]
@@ -798,7 +799,7 @@ impl ClientToServerNonceGen {
 }
 
 /// Nonce for a server-to-client secret box
-pub struct ServerToClientNonce(secretbox::Nonce);
+pub struct ServerToClientNonce(Nonce);
 impl ServerToClientNonce {
     pub fn as_slice(&self) -> &[u8] {
         &self.0[..]
@@ -830,8 +831,8 @@ pub struct HandshakeOutcome {
 }
 
 
-fn zero_nonce() -> secretbox::Nonce {
-    secretbox::Nonce::from_slice(&[0u8; size_of::<secretbox::Nonce>()]) .unwrap()
+fn zero_nonce() -> Nonce {
+    Nonce([0u8; size_of::<Nonce>()])
 }
 
 unsafe fn bytes<T>(t: &T) -> &[u8] {
