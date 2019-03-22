@@ -724,8 +724,13 @@ impl ClientToServerKey {
         ClientToServerKey(build_shared_key(&server_pk.0, net_id,
                                            shared_a, shared_b, shared_c))
     }
+
     pub fn as_slice(&self) -> &[u8] {
         &self.0[..]
+    }
+
+    pub fn into_inner(self) -> secretbox::Key {
+        self.0
     }
 }
 
@@ -741,9 +746,15 @@ impl ServerToClientKey {
         ServerToClientKey(build_shared_key(&server_pk.0, net_id,
                                            shared_a, shared_b, shared_c))
     }
+
     pub fn as_slice(&self) -> &[u8] {
         &self.0[..]
     }
+
+    pub fn into_inner(self) -> secretbox::Key {
+        self.0
+    }
+
 }
 
 pub struct NonceGen {
