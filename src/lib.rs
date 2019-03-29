@@ -796,6 +796,28 @@ impl NonceGen {
         }
     }
 
+    /// #Examples
+    /// ```rust
+    /// use shs_core::NonceGen;
+    /// use sodiumoxide::crypto::secretbox::Nonce;
+    ///
+    /// let nonce_bytes = [0, 0, 0, 0, 0, 0, 0, 0,
+    ///                    0, 0, 0, 0, 0, 0, 0, 0,
+    ///                    0, 0, 0, 0, 0, 0, 255, 255];
+    /// let mut gen = NonceGen::with_starting_nonce(Nonce::from_slice(&nonce_bytes).unwrap());
+    /// let n1 = gen.next();
+    /// assert_eq!(&n1[..], &nonce_bytes);
+    /// let n2 = gen.next();
+    /// assert_eq!(&n2[..], [0, 0, 0, 0, 0, 0, 0, 0,
+    ///                      0, 0, 0, 0, 0, 0, 0, 0,
+    ///                      0, 0, 0, 0, 0, 1, 0, 0]);
+    /// ```
+    pub fn with_starting_nonce(nonce: Nonce) -> NonceGen {
+        NonceGen {
+            next_nonce: nonce
+        }
+    }
+
     pub fn next(&mut self) -> Nonce {
         let n = self.next_nonce.clone();
 
