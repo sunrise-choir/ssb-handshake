@@ -3,6 +3,7 @@
 //! ([repo](https://github.com/ssbc/scuttlebutt-protocol-guide)),
 //! which he graciously released into the public domain.
 
+#[macro_use] extern crate quick_error;
 extern crate libsodium_sys;
 extern crate sodiumoxide;
 
@@ -24,33 +25,67 @@ use sodiumoxide::crypto::hash::sha256::{hash, Digest as ShaDigest};
 
 use libsodium_sys::{crypto_sign_ed25519_pk_to_curve25519, crypto_sign_ed25519_sk_to_curve25519};
 
-#[derive(Debug)]
-pub enum HandshakeError {
-    Io(io::Error),
+quick_error! {
+    #[derive(Debug)]
+    pub enum HandshakeError {
+        Io(err: io::Error) {
+            description(err.description())
+        }
 
-    ClientHelloDeserializeFailed,
-    ClientHelloVerifyFailed,
+        ClientHelloDeserializeFailed {
+            description("Failed to read client hello message")
+        }
+        ClientHelloVerifyFailed {
+            description("Failed to verify client hello message")
+        }
 
-    ServerHelloDeserializeFailed,
-    ServerHelloVerifyFailed,
+        ServerHelloDeserializeFailed {
+            description("Failed to read server hello message")
+        }
+        ServerHelloVerifyFailed {
+            description("Failed to verify server hello message")
+        }
 
-    ClientAuthDeserializeFailed,
-    ClientAuthOpenFailed,
-    ClientAuthVerifyFailed,
+        ClientAuthDeserializeFailed {
+            description("Failed to read client auth message")
+        }
+        ClientAuthOpenFailed {
+            description("Failed to decrypt client auth message")
+        }
+        ClientAuthVerifyFailed {
+            description("Failed to verify client auth message")
+        }
 
-    ServerAcceptDeserializeFailed,
-    ServerAcceptOpenFailed,
-    ServerAcceptVerifyFailed,
+        ServerAcceptDeserializeFailed {
+            description("Failed to read server accept message")
+        }
+        ServerAcceptOpenFailed {
+            description("Failed to decrypt server accept message")
+        }
+        ServerAcceptVerifyFailed {
+            description("Failed to verify server accept message")
+        }
 
-    SharedAInvalid,
-    SharedBInvalid,
-    SharedCInvalid,
+        SharedAInvalid {}
+        SharedBInvalid {}
+        SharedCInvalid {}
+    }
 }
 impl From<io::Error> for HandshakeError {
     fn from(err: io::Error) -> HandshakeError {
         HandshakeError::Io(err)
     }
 }
+impl From<HandshakeError> for io::Error {
+    fn from(err: HandshakeError) -> io::Error {
+        match err {
+            HandshakeError::Io(err) => err,
+            err => io::Error::new(io::ErrorKind::InvalidData, err)
+        }
+    }
+}
+
+
 
 use HandshakeError::*;
 
