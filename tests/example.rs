@@ -1,13 +1,17 @@
 use std::sync::mpsc::{channel, Sender, Receiver};
 use std::thread;
 
+use ssb_crypto::{NetworkKey, NonceGen, generate_longterm_keypair};
+
 use shs_core::*;
 
 fn client(to_server: Sender<Vec<u8>>, from_server: Receiver<Vec<u8>>,
           server_pk: ServerPublicKey) -> Result<HandshakeOutcome, HandshakeError> {
 
-    let net_id = NetworkId::SSB_MAIN_NET;
-    let (pk, sk) = client::generate_longterm_keypair();
+    let net_id = NetworkKey::SSB_MAIN_NET;
+    let (pk, sk) = generate_longterm_keypair();
+    let (pk, sk) = (ClientPublicKey(pk), ClientSecretKey(sk));
+
     let (eph_pk, eph_sk) = client::generate_eph_keypair();
 
     // Send client hello
@@ -38,10 +42,11 @@ fn client(to_server: Sender<Vec<u8>>, from_server: Receiver<Vec<u8>>,
                                &shared_b, &shared_c)?;
 
     Ok(HandshakeOutcome {
-        c2s_key: ClientToServerKey::new(&server_pk, &net_id, &shared_a, &shared_b, &shared_c),
-        s2c_key: ServerToClientKey::new(&pk, &net_id, &shared_a, &shared_b, &shared_c),
-        c2s_noncegen: ClientToServerNonceGen::new(&server_eph_pk, &net_id),
-        s2c_noncegen: ServerToClientNonceGen::new(&eph_pk, &net_id),
+        read_key: server_to_client_key(&pk, &net_id, &shared_a, &shared_b, &shared_c),
+        read_noncegen: NonceGen::new(&eph_pk.0, &net_id),
+
+        write_key: client_to_server_key(&server_pk, &net_id, &shared_a, &shared_b, &shared_c),
+        write_noncegen: NonceGen::new(&server_eph_pk.0, &net_id),
     })
 }
 
@@ -49,7 +54,7 @@ fn server(to_client: Sender<Vec<u8>>, from_client: Receiver<Vec<u8>>,
           pk: ServerPublicKey, sk: ServerSecretKey)
           -> Result<HandshakeOutcome, HandshakeError> {
 
-    let net_id = NetworkId::SSB_MAIN_NET;
+    let net_id = NetworkKey::SSB_MAIN_NET;
     let (eph_pk, eph_sk) = server::generate_eph_keypair();
 
     // Receive and verify client hello
@@ -83,12 +88,12 @@ fn server(to_client: Sender<Vec<u8>>, from_client: Receiver<Vec<u8>>,
     to_client.send(server_acc.to_vec()).unwrap();
 
     Ok(HandshakeOutcome {
-        c2s_key: ClientToServerKey::new(&pk, &net_id, &shared_a, &shared_b, &shared_c),
-        s2c_key: ServerToClientKey::new(&client_pk, &net_id, &shared_a, &shared_b, &shared_c),
-        c2s_noncegen: ClientToServerNonceGen::new(&eph_pk, &net_id),
-        s2c_noncegen: ServerToClientNonceGen::new(&client_eph_pk, &net_id),
-    })
+        read_key: client_to_server_key(&pk, &net_id, &shared_a, &shared_b, &shared_c),
+        read_noncegen: NonceGen::new(&eph_pk.0, &net_id),
 
+        write_key: server_to_client_key(&client_pk, &net_id, &shared_a, &shared_b, &shared_c),
+        write_noncegen: NonceGen::new(&client_eph_pk.0, &net_id),
+    })
 }
 
 
@@ -98,7 +103,8 @@ fn ok() -> Result<(), HandshakeError> {
     let (c2s_sender, c2s_receiver) = channel();
     let (s2c_sender, s2c_receiver) = channel();
 
-    let (server_pk, server_sk) = server::generate_longterm_keypair();
+    let (pk, sk) = generate_longterm_keypair();
+    let (server_pk, server_sk) = (ServerPublicKey(pk), ServerSecretKey(sk));
 
     // The client needs to know the server's long-term pk before the handshake.
     let server_pk_copy = server_pk.clone();
@@ -109,14 +115,14 @@ fn ok() -> Result<(), HandshakeError> {
     let mut cout = client_thread.join().unwrap()?;
     let mut sout = server_thread.join().unwrap()?;
 
-    assert_eq!(cout.c2s_key.as_slice(), sout.c2s_key.as_slice());
-    assert_eq!(cout.s2c_key.as_slice(), sout.s2c_key.as_slice());
+    assert_eq!(cout.write_key, sout.read_key);
+    assert_eq!(cout.read_key, sout.write_key);
 
-    assert_eq!(cout.c2s_noncegen.next().as_slice(),
-               sout.c2s_noncegen.next().as_slice());
+    assert_eq!(cout.write_noncegen.next(),
+               sout.read_noncegen.next());
 
-    assert_eq!(cout.s2c_noncegen.next().as_slice(),
-               sout.s2c_noncegen.next().as_slice());
+    assert_eq!(cout.read_noncegen.next(),
+               sout.write_noncegen.next());
 
     Ok(())
 }
