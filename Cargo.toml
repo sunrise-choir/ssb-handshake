@@ -12,7 +12,7 @@ keywords = ["secret-handshake", "handshake", "ssb", "scuttlebutt", "crypto"]
 
 [dependencies]
 quick-error = "1.2"
-ssb-crypto = { git = "https://github.com/sunrise-choir/ssb-crypto", rev = "199a473" }
+ssb-crypto = "0.1"
 
 [dev-dependencies]
 criterion = "~0.2.10"

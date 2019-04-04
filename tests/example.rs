@@ -3,7 +3,7 @@ use std::thread;
 
 use ssb_crypto::{NetworkKey, NonceGen, generate_longterm_keypair};
 
-use shs_core::*;
+use shs_core::{*, messages::*};
 
 fn client(to_server: Sender<Vec<u8>>, from_server: Receiver<Vec<u8>>,
           server_pk: ServerPublicKey) -> Result<HandshakeOutcome, HandshakeError> {
