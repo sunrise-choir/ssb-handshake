@@ -1,11 +1,11 @@
 [package]
 name = "shs_core"
-version = "0.2.3"
+version = "0.3.0"
 authors = ["sean billig <sean.billig@gmail.com>"]
 edition = "2018"
 license = "AGPL-3.0"
 description = "Secret-handshake protocol core"
-repository = "https://github.com/sbillig/shs_core"
+repository = "https://github.com/sunrise-choir/shs_core"
 documentation = "https://docs.rs/shs_core/"
 readme = "README.md"
 keywords = ["secret-handshake", "handshake", "ssb", "scuttlebutt", "crypto"]
