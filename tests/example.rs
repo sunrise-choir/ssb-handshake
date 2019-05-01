@@ -3,7 +3,7 @@ use std::thread;
 
 use ssb_crypto::{NetworkKey, NonceGen, generate_longterm_keypair};
 
-use shs_core::{
+use shs::{
     *,
     messages::*,
     shared_secret::*,
