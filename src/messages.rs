@@ -1,6 +1,8 @@
 use core::mem::size_of;
 
 use crate::*;
+use crate::utils::{bytes, zero_nonce};
+use crate::shared_secret::*;
 use crate::error::HandshakeError;
 
 use ssb_crypto::{
@@ -22,6 +24,8 @@ use ssb_crypto::hash::hash;
 
 
 /// ## Message 1 (Client to Server)
+/// Client proves that it knows the NetworkKey,
+/// and sends its ephemeral public key.
 #[repr(C, packed)]
 pub struct ClientHello {
     hmac: AuthTag,
@@ -84,6 +88,8 @@ impl ClientHello {
 }
 
 /// ## Message 2 (Server to Client)
+/// Server proves that it knows the NetworkKey,
+/// and sends its ephemeral public key.
 #[repr(C, packed)]
 pub struct ServerHello {
     hmac: AuthTag,
