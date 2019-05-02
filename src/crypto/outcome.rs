@@ -1,5 +1,5 @@
 use crate::*;
-use crate::shared_secret::*;
+use super::shared_secret::*;
 use ssb_crypto::{
     hash::Digest,
     hash::hash,
@@ -8,6 +8,52 @@ use ssb_crypto::{
     secretbox,
 };
 
+pub struct HandshakeOutcome {
+    pub read_key: secretbox::Key,
+    pub read_noncegen: NonceGen,
+
+    pub write_key: secretbox::Key,
+    pub write_noncegen: NonceGen,
+}
+impl HandshakeOutcome {
+    pub fn client_side(
+        pk: &ClientPublicKey,
+        server_pk: &ServerPublicKey,
+        eph_pk: &ClientEphPublicKey,
+        server_eph_pk: &ServerEphPublicKey,
+        net_key: &NetworkKey,
+        shared_a: &SharedA,
+        shared_b: &SharedB,
+        shared_c: &SharedC,
+    ) -> HandshakeOutcome {
+        HandshakeOutcome {
+            read_key: server_to_client_key(&pk, &net_key, &shared_a, &shared_b, &shared_c),
+            read_noncegen: NonceGen::new(&eph_pk.0, &net_key),
+
+            write_key: client_to_server_key(&server_pk, &net_key, &shared_a, &shared_b, &shared_c),
+            write_noncegen: NonceGen::new(&server_eph_pk.0, &net_key),
+        }
+    }
+    pub fn server_side(
+        pk: &ServerPublicKey,
+        client_pk: &ClientPublicKey,
+        eph_pk: &ServerEphPublicKey,
+        client_eph_pk: &ClientEphPublicKey,
+        net_key: &NetworkKey,
+        shared_a: &SharedA,
+        shared_b: &SharedB,
+        shared_c: &SharedC,
+    ) -> HandshakeOutcome {
+
+        HandshakeOutcome {
+            read_key: client_to_server_key(&pk, &net_key, &shared_a, &shared_b, &shared_c),
+            read_noncegen: NonceGen::new(&eph_pk.0, &net_key),
+
+            write_key: server_to_client_key(&client_pk, &net_key, &shared_a, &shared_b, &shared_c),
+            write_noncegen: NonceGen::new(&client_eph_pk.0, &net_key),
+        }
+    }
+}
 
 struct SharedKeyHash(Digest);
 
@@ -63,7 +109,7 @@ fn build_shared_key(
 }
 
 /// Final shared key used to seal and open secret boxes (client to server)
-pub fn client_to_server_key(
+fn client_to_server_key(
     server_pk: &ServerPublicKey,
     net_key: &NetworkKey,
     shared_a: &SharedA,
@@ -80,7 +126,7 @@ pub fn client_to_server_key(
 }
 
 /// Final shared key used to seal and open secret boxes (server to client)
-pub fn server_to_client_key(
+fn server_to_client_key(
     server_pk: &ClientPublicKey,
     net_key: &NetworkKey,
     shared_a: &SharedA,

@@ -1,9 +1,11 @@
 use core::mem::size_of;
 
-use crate::*;
 use crate::utils::{bytes, zero_nonce};
-use crate::shared_secret::*;
 use crate::error::HandshakeError;
+
+use super::*;
+use super::shared_secret::*;
+
 
 use ssb_crypto::{
     AuthTag,
@@ -14,10 +16,6 @@ use ssb_crypto::{
     verify_detached,
     NetworkKey,
     secretbox,
-};
-
-use ssb_crypto::handshake::{
-    EphPublicKey,
 };
 
 use ssb_crypto::hash::hash;
@@ -57,10 +55,8 @@ impl ClientHello {
                 hmac: AuthTag::from_slice(&hmac_bytes)
                     .ok_or(HandshakeError::ClientHelloDeserializeFailed)?,
 
-                eph_pk: ClientEphPublicKey(
-                    EphPublicKey::from_slice(&pk_bytes)
-                        .ok_or(HandshakeError::ClientHelloDeserializeFailed)?,
-                ),
+                eph_pk: ClientEphPublicKey::from_slice(&pk_bytes)
+                    .ok_or(HandshakeError::ClientHelloDeserializeFailed)?,
             })
         } else {
             Err(HandshakeError::ClientHelloDeserializeFailed)
@@ -119,11 +115,9 @@ impl ServerHello {
             Ok(ServerHello {
                 hmac: AuthTag::from_slice(&hmac_bytes)
                     .ok_or(HandshakeError::ServerHelloDeserializeFailed)?,
-                eph_pk: ServerEphPublicKey(
-                    EphPublicKey::from_slice(&pk_bytes)
-                        .ok_or(HandshakeError::ServerHelloDeserializeFailed)?,
-                ),
-            })
+                eph_pk: ServerEphPublicKey::from_slice(&pk_bytes)
+                    .ok_or(HandshakeError::ServerHelloDeserializeFailed)?,
+                })
         } else {
             Err(HandshakeError::ServerHelloDeserializeFailed)
         }

@@ -12,19 +12,7 @@ use ssb_crypto::{
     NetworkKey,
     NonceGen,
     PublicKey,
-    secretbox,
     SecretKey,
-    Signature,
-};
-
-use ssb_crypto::handshake::{
-    EphPublicKey,
-    EphSecretKey,
-    derive_shared_secret,
-    derive_shared_secret_pk,
-    derive_shared_secret_sk,
-    SharedSecret,
-    generate_ephemeral_keypair,
 };
 
 use futures::io::{
@@ -35,29 +23,46 @@ use futures::io::{
 };
 use core::mem::size_of;
 
-
-use ssb_crypto::hash::{hash, Digest};
-
 mod error;
 mod utils;
 pub use error::HandshakeError;
-pub mod messages;
+pub mod crypto;
+use crypto::{
+    ClientEphPublicKey,
+    ClientPublicKey,
+    ClientSecretKey,
 
-pub mod shared_secret;
-pub mod shared_key;
+    ServerEphPublicKey,
+    ServerPublicKey,
+    ServerSecretKey,
 
-use messages::*;
-use shared_secret::*;
-use shared_key::*;
+    gen_client_eph_keypair,
+    gen_server_eph_keypair,
+
+    message::{
+        ClientAuth,
+        ClientHello,
+        ServerHello,
+        ServerAccept,
+    },
+    shared_secret::{
+        SharedA,
+        SharedB,
+        SharedC,
+    },
+    outcome::HandshakeOutcome
+};
 
 // TODO: memzero our secrets, if sodiumoxide doesn't do it for us.
 
-pub async fn client<S>(mut stream: S,
-                       net_key: NetworkKey,
-                       pk: PublicKey,
-                       sk: SecretKey,
-                       server_pk: PublicKey)
-                       -> Result<HandshakeOutcome, HandshakeError>
+/// Perform the client side of the handshake using the given `AsyncRead + AsyncWrite` stream.
+pub async fn client<S>(
+    mut stream: S,
+    net_key: NetworkKey,
+    pk: PublicKey,
+    sk: SecretKey,
+    server_pk: PublicKey)
+    -> Result<HandshakeOutcome, HandshakeError>
 where S: AsyncRead + AsyncWrite + Unpin
 {
     let r = await!(try_client_side(&mut stream, net_key, pk, sk, server_pk));
@@ -80,7 +85,7 @@ where S: AsyncRead + AsyncWrite + Unpin
     let sk = ClientSecretKey(sk);
     let server_pk = ServerPublicKey(server_pk);
 
-    let (eph_pk, eph_sk) = client::generate_eph_keypair();
+    let (eph_pk, eph_sk) = gen_client_eph_keypair();
     let hello = ClientHello::new(&eph_pk, &net_key);
     await!(stream.write_all(&hello.as_slice()))?;
     await!(stream.flush())?;
@@ -111,15 +116,19 @@ where S: AsyncRead + AsyncWrite + Unpin
                                &net_key, &shared_a,
                                &shared_b, &shared_c)?;
 
-    Ok(HandshakeOutcome {
-        read_key: server_to_client_key(&pk, &net_key, &shared_a, &shared_b, &shared_c),
-        read_noncegen: NonceGen::new(&eph_pk.0, &net_key),
-
-        write_key: client_to_server_key(&server_pk, &net_key, &shared_a, &shared_b, &shared_c),
-        write_noncegen: NonceGen::new(&server_eph_pk.0, &net_key),
-    })
+    Ok(HandshakeOutcome::client_side(
+        &pk,
+        &server_pk,
+        &eph_pk,
+        &server_eph_pk,
+        &net_key,
+        &shared_a,
+        &shared_b,
+        &shared_c
+    ))
 }
 
+/// Perform the server side of the handshake using the given `AsyncRead + AsyncWrite` stream.
 pub async fn server<S>(mut stream: S,
                        net_key: NetworkKey,
                        pk: PublicKey,
@@ -145,7 +154,7 @@ where S: AsyncRead + AsyncWrite + Unpin
     let pk = ServerPublicKey(pk);
     let sk = ServerSecretKey(sk);
 
-    let (eph_pk, eph_sk) = server::generate_eph_keypair();
+    let (eph_pk, eph_sk) = gen_server_eph_keypair();
 
     // Receive and verify client hello
     let client_eph_pk = {
@@ -182,96 +191,17 @@ where S: AsyncRead + AsyncWrite + Unpin
     await!(stream.write_all(server_acc.as_slice()))?;
     await!(stream.flush())?;
 
-    Ok(HandshakeOutcome {
-        read_key: client_to_server_key(&pk, &net_key, &shared_a, &shared_b, &shared_c),
-        read_noncegen: NonceGen::new(&eph_pk.0, &net_key),
-
-        write_key: server_to_client_key(&client_pk, &net_key, &shared_a, &shared_b, &shared_c),
-        write_noncegen: NonceGen::new(&client_eph_pk.0, &net_key),
-    })
+    Ok(HandshakeOutcome::server_side(
+        &pk,
+        &client_pk,
+        &eph_pk,
+        &client_eph_pk,
+        &net_key,
+        &shared_a,
+        &shared_b,
+        &shared_c,
+    ))
 }
-
-
-
-/// Client long-term public key
-#[derive(Clone)]
-pub struct ClientPublicKey(pub PublicKey);
-impl ClientPublicKey {
-    pub fn from_slice(b: &[u8]) -> Option<ClientPublicKey> {
-        Some(ClientPublicKey(PublicKey::from_slice(b)?))
-    }
-}
-
-/// Client long-term secret key
-pub struct ClientSecretKey(pub SecretKey);
-impl ClientSecretKey {
-    pub fn from_slice(b: &[u8]) -> Option<ClientSecretKey> {
-        Some(ClientSecretKey(SecretKey::from_slice(b)?))
-    }
-}
-
-/// Server long-term public key; known to client prior to the handshake
-#[derive(Clone)]
-pub struct ServerPublicKey(pub PublicKey);
-impl ServerPublicKey {
-    pub fn from_slice(b: &[u8]) -> Option<ServerPublicKey> {
-        Some(ServerPublicKey(PublicKey::from_slice(b)?))
-    }
-    pub fn as_slice(&self) -> &[u8] {
-        &self.0[..]
-    }
-}
-
-/// Server long-term secret key
-pub struct ServerSecretKey(pub SecretKey);
-impl ServerSecretKey {
-    pub fn from_slice(b: &[u8]) -> Option<ServerSecretKey> {
-        Some(ServerSecretKey(SecretKey::from_slice(b)?))
-    }
-}
-
-#[derive(Clone)]
-pub struct ClientSignature(Signature);
-struct ServerSignature(Signature);
-
-/// Client ephemeral public key (generated anew for each connection)
-#[derive(Clone)]
-pub struct ClientEphPublicKey(pub EphPublicKey);
-/// Client ephemeral secret key
-pub struct ClientEphSecretKey(pub EphSecretKey);
-
-/// Server ephemeral public key (generated anew for each connection)
-#[derive(Clone)]
-pub struct ServerEphPublicKey(pub EphPublicKey);
-/// Server ephemeral secret key
-pub struct ServerEphSecretKey(pub EphSecretKey);
-
-pub mod client {
-    use super::*;
-
-    pub fn generate_eph_keypair() -> (ClientEphPublicKey, ClientEphSecretKey) {
-        let (pk, sk) = generate_ephemeral_keypair();
-        (ClientEphPublicKey(pk), ClientEphSecretKey(sk))
-    }
-}
-
-pub mod server {
-    use super::*;
-
-    pub fn generate_eph_keypair() -> (ServerEphPublicKey, ServerEphSecretKey) {
-        let (pk, sk) = generate_ephemeral_keypair();
-        (ServerEphPublicKey(pk), ServerEphSecretKey(sk))
-    }
-}
-
-pub struct HandshakeOutcome {
-    pub read_key: secretbox::Key,
-    pub read_noncegen: NonceGen,
-
-    pub write_key: secretbox::Key,
-    pub write_noncegen: NonceGen,
-}
-
 
 #[cfg(test)]
 mod tests {
@@ -387,11 +317,11 @@ mod tests {
     }
 
     #[test]
-    fn reject_wrong_server_pk() {
+    fn server_rejects_wrong_pk() {
         test_handshake_with_bad_server_pk(
-            PublicKey::from_slice(&[ 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-		                     0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-		                     0, 0, 0, 0, 0, 0, 0, 0, 0, 0 ]).unwrap());
+            PublicKey::from_slice(&[0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+		                    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+		                    0, 0, 0, 0, 0, 0, 0, 0, 0, 0]).unwrap());
 
         let (pk, _sk) = generate_longterm_keypair();
         test_handshake_with_bad_server_pk(pk);
