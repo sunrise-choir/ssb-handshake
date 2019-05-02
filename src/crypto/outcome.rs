@@ -1,4 +1,5 @@
 use crate::*;
+use super::message::ServerAcceptVerificationToken;
 use super::shared_secret::*;
 use ssb_crypto::{
     hash::Digest,
@@ -17,6 +18,7 @@ pub struct HandshakeOutcome {
 }
 impl HandshakeOutcome {
     pub fn client_side(
+        _v: ServerAcceptVerificationToken,
         pk: &ClientPublicKey,
         server_pk: &ServerPublicKey,
         eph_pk: &ClientEphPublicKey,

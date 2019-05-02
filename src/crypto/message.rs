@@ -370,7 +370,7 @@ impl ServerAccept {
         shared_a: &SharedA,
         shared_b: &SharedB,
         shared_c: &SharedC,
-    ) -> Result<(), HandshakeError> {
+    ) -> Result<ServerAcceptVerificationToken, HandshakeError> {
         let server_sig = {
             let key = ServerAcceptKeyData {
                 net_key: net_key.clone(),
@@ -397,7 +397,7 @@ impl ServerAccept {
         }
         .verify(&server_sig, server_pk);
         if ok {
-            Ok(())
+            Ok(ServerAcceptVerificationToken(0))
         } else {
             Err(HandshakeError::ServerAcceptVerifyFailed)
         }
@@ -410,6 +410,8 @@ impl ServerAccept {
         self.0.clone()
     }
 }
+
+pub struct ServerAcceptVerificationToken(u8);
 
 #[repr(C, packed)]
 struct ServerAcceptSignData {

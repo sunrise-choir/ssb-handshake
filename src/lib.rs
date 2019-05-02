@@ -112,11 +112,12 @@ where S: AsyncRead + AsyncWrite + Unpin
     await!(stream.read_exact(&mut buf))?;
 
     let server_acc = ServerAccept::from_buffer(buf.to_vec())?;
-    server_acc.open_and_verify(&sk, &pk, &server_pk,
-                               &net_key, &shared_a,
-                               &shared_b, &shared_c)?;
+    let v = server_acc.open_and_verify(&sk, &pk, &server_pk,
+                                       &net_key, &shared_a,
+                                       &shared_b, &shared_c)?;
 
     Ok(HandshakeOutcome::client_side(
+        v,
         &pk,
         &server_pk,
         &eph_pk,
