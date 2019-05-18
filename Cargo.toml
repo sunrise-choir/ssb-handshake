@@ -11,15 +11,15 @@ readme = "README.md"
 keywords = ["secret-handshake", "handshake", "ssb", "scuttlebutt", "crypto"]
 
 [dependencies]
-futures-preview = "0.3.0-alpha.15"
+futures-preview = "0.3.0-alpha.16"
 quick-error = "1.2"
 ssb-crypto = "~0.1.2"
 
 [dev-dependencies]
-async-ringbuffer = "0.5.0"
+async-ringbuffer = "0.5.1"
 criterion = "~0.2.10"
 hex = "0.3.2"
-futures-util-preview = "0.3.0-alpha.15"
+futures-util-preview = "0.3.0-alpha.16"
 pin-utils = "0.1.0-alpha.4"
 readwrite = "0.1.1"
 

@@ -3,7 +3,7 @@
 //! ([repo](https://github.com/ssbc/scuttlebutt-protocol-guide)),
 //! which he graciously released into the public domain.
 
-#![feature(async_await, await_macro)]
+#![feature(async_await)]
 extern crate futures;
 #[macro_use] extern crate quick_error;
 extern crate ssb_crypto;
@@ -65,9 +65,9 @@ pub async fn client<S>(
     -> Result<HandshakeOutcome, HandshakeError>
 where S: AsyncRead + AsyncWrite + Unpin
 {
-    let r = await!(try_client_side(&mut stream, net_key, pk, sk, server_pk));
+    let r = try_client_side(&mut stream, net_key, pk, sk, server_pk).await;
     if r.is_err() {
-        await!(stream.close()).unwrap_or(());
+        stream.close().await.unwrap_or(());
     }
     r
 }
@@ -87,12 +87,12 @@ where S: AsyncRead + AsyncWrite + Unpin
 
     let (eph_pk, eph_sk) = gen_client_eph_keypair();
     let hello = ClientHello::new(&eph_pk, &net_key);
-    await!(stream.write_all(&hello.as_slice()))?;
-    await!(stream.flush())?;
+    stream.write_all(&hello.as_slice()).await?;
+    stream.flush().await?;
 
     let server_eph_pk = {
         let mut buf = [0u8; size_of::<ServerHello>()];
-        await!(stream.read_exact(&mut buf))?;
+        stream.read_exact(&mut buf).await?;
 
         let server_hello = ServerHello::from_slice(&buf)?;
         server_hello.verify(&net_key)?
@@ -105,11 +105,11 @@ where S: AsyncRead + AsyncWrite + Unpin
 
     // Send client auth
     let client_auth = ClientAuth::new(&sk, &pk, &server_pk, &net_key, &shared_a, &shared_b);
-    await!(stream.write_all(client_auth.as_slice()))?;
-    await!(stream.flush())?;
+    stream.write_all(client_auth.as_slice()).await?;
+    stream.flush().await?;
 
     let mut buf = [0u8; 80];
-    await!(stream.read_exact(&mut buf))?;
+    stream.read_exact(&mut buf).await?;
 
     let server_acc = ServerAccept::from_buffer(buf.to_vec())?;
     let v = server_acc.open_and_verify(&sk, &pk, &server_pk,
@@ -137,9 +137,9 @@ pub async fn server<S>(mut stream: S,
                        -> Result<HandshakeOutcome, HandshakeError>
 where S: AsyncRead + AsyncWrite + Unpin
 {
-    let r = await!(try_server_side(&mut stream, net_key, pk, sk));
+    let r = try_server_side(&mut stream, net_key, pk, sk).await;
     if r.is_err() {
-        await!(stream.close()).unwrap_or(());
+        stream.close().await.unwrap_or(());
     }
     r
 }
@@ -160,15 +160,15 @@ where S: AsyncRead + AsyncWrite + Unpin
     // Receive and verify client hello
     let client_eph_pk = {
         let mut buf = [0u8; 64];
-        await!(stream.read_exact(&mut buf))?;
+        stream.read_exact(&mut buf).await?;
         let client_hello = ClientHello::from_slice(&buf)?;
         client_hello.verify(&net_key)?
     };
 
     // Send server hello
     let hello = ServerHello::new(&eph_pk, &net_key);
-    await!(stream.write_all(hello.as_slice()))?;
-    await!(stream.flush())?;
+    stream.write_all(hello.as_slice()).await?;
+    stream.flush().await?;
 
     // Derive shared secrets
     let shared_a = SharedA::server_side(&eph_sk, &client_eph_pk)?;
@@ -177,7 +177,7 @@ where S: AsyncRead + AsyncWrite + Unpin
     // Receive and verify client auth
     let (client_sig, client_pk) = {
         let mut buf = [0u8; 112];
-        await!(stream.read_exact(&mut buf))?;
+        stream.read_exact(&mut buf).await?;
 
         let client_auth = ClientAuth::from_buffer(buf.to_vec())?;
         client_auth.open_and_verify(&pk, &net_key, &shared_a, &shared_b)?
@@ -189,8 +189,8 @@ where S: AsyncRead + AsyncWrite + Unpin
     // Send server accept
     let server_acc = ServerAccept::new(&sk, &client_pk, &net_key, &client_sig,
                                        &shared_a, &shared_b, &shared_c);
-    await!(stream.write_all(server_acc.as_slice()))?;
-    await!(stream.flush())?;
+    stream.write_all(server_acc.as_slice()).await?;
+    stream.flush().await?;
 
     Ok(HandshakeOutcome::server_side(
         &pk,
@@ -274,7 +274,7 @@ mod tests {
         let server_side = server(&mut s_stream, net_key.clone(), s_pk, s_sk);
 
         let (c_out, s_out) = block_on(async {
-            await!(join(client_side, server_side))
+            join(client_side, server_side).await
         });
 
         let mut c_out = c_out.unwrap();
@@ -307,7 +307,7 @@ mod tests {
         let server_side = server(&mut s_stream, NetworkKey::random(), s_pk, s_sk);
 
         let (c_out, s_out) = block_on(async {
-            await!(join(client_side, server_side))
+            join(client_side, server_side).await
         });
 
         assert!(is_eof_err(&c_out));
@@ -339,7 +339,7 @@ mod tests {
         let server_side = server(&mut s_stream, net_key.clone(), s_pk, s_sk);
 
         let (c_out, s_out) = block_on(async {
-            await!(join(client_side, server_side))
+            join(client_side, server_side).await
         });
 
         assert!(c_out.is_err());

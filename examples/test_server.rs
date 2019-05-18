@@ -1,4 +1,4 @@
-#![feature(async_await, await_macro)]
+#![feature(async_await)]
 
 use std::env;
 use std::io::{stdin, stdout, Write};
