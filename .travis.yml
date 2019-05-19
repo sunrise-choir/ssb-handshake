@@ -1,0 +1,21 @@
+language: rust
+rust:
+  - stable
+  - beta
+  - nightly
+
+os:
+  - linux
+
+cache: cargo
+script:
+  - cargo test
+
+matrix:
+  allow_failures:
+    - rust: nightly
+  fast_finish: true
+
+notifications:
+  email:
+    on_success: never
