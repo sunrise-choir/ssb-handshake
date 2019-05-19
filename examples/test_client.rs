@@ -2,7 +2,7 @@
 
 use futures::executor::block_on;
 use futures::io::AllowStdIo;
-use shs::*;
+use ssb_handshake::*;
 use std::env;
 use std::io::{stdin, stdout, Write};
 
