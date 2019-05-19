@@ -1,12 +1,12 @@
 [package]
 name = "ssb-handshake"
-version = "0.3.0"
+version = "0.4.0"
 authors = ["sean billig <sean.billig@gmail.com>"]
 edition = "2018"
 license = "AGPL-3.0"
-description = "Secret-handshake protocol core"
-repository = "https://github.com/sunrise-choir/shs_core"
-documentation = "https://docs.rs/shs_core/"
+description = "Secret-handshake protocol for Secure Scuttlebutt"
+repository = "https://github.com/sunrise-choir/ssb-handshake"
+documentation = "https://docs.rs/ssb-handshake/"
 readme = "README.md"
 keywords = ["secret-handshake", "handshake", "ssb", "scuttlebutt", "shs"]
 
