@@ -1,30 +1,16 @@
 use super::{
-    ClientEphPublicKey,
-    ClientEphSecretKey,
-    ClientPublicKey,
-    ClientSecretKey,
-
-    ServerEphPublicKey,
-    ServerEphSecretKey,
-    ServerPublicKey,
-    ServerSecretKey,
+    ClientEphPublicKey, ClientEphSecretKey, ClientPublicKey, ClientSecretKey, ServerEphPublicKey,
+    ServerEphSecretKey, ServerPublicKey, ServerSecretKey,
 };
 
 use crate::error::HandshakeError;
 
 use ssb_crypto::{
     handshake::{
-        derive_shared_secret,
-        derive_shared_secret_pk,
-        derive_shared_secret_sk,
-        SharedSecret,
+        derive_shared_secret, derive_shared_secret_pk, derive_shared_secret_sk, SharedSecret,
     },
-    hash::{
-        Digest,
-        hash,
-    },
+    hash::{hash, Digest},
 };
-
 
 /// Shared Secret A (client and server ephemeral keys)
 #[derive(Clone)]

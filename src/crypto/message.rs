@@ -1,25 +1,23 @@
 use core::mem::size_of;
 
-use crate::utils::{bytes, zero_nonce};
 use crate::error::HandshakeError;
+use crate::utils::{bytes, zero_nonce};
 
-use super::*;
 use super::shared_secret::*;
-
+use super::*;
 
 use ssb_crypto::{
+    secretbox,
+    sign_detached,
+    verify_detached,
     AuthTag,
+    NetworkKey,
     // KeyPair,
     PublicKey,
     Signature,
-    sign_detached,
-    verify_detached,
-    NetworkKey,
-    secretbox,
 };
 
 use ssb_crypto::hash::hash;
-
 
 /// ## Message 1 (Client to Server)
 /// Client proves that it knows the NetworkKey,
@@ -117,7 +115,7 @@ impl ServerHello {
                     .ok_or(HandshakeError::ServerHelloDeserializeFailed)?,
                 eph_pk: ServerEphPublicKey::from_slice(&pk_bytes)
                     .ok_or(HandshakeError::ServerHelloDeserializeFailed)?,
-                })
+            })
         } else {
             Err(HandshakeError::ServerHelloDeserializeFailed)
         }
@@ -143,7 +141,6 @@ impl ServerHello {
         self.as_slice().to_vec()
     }
 }
-
 
 /// ## Message 3 (Client to Server)
 pub struct ClientAuth(Vec<u8>);
@@ -225,8 +222,7 @@ impl ClientAuth {
             .into_key();
             let v = secretbox::open(&self.0, &zero_nonce(), &key)
                 .map_err(|_| HandshakeError::ClientAuthOpenFailed)?;
-            ClientAuthPayload::from_slice(&v)
-                .ok_or(HandshakeError::ClientAuthVerifyFailed)?
+            ClientAuthPayload::from_slice(&v).ok_or(HandshakeError::ClientAuthVerifyFailed)?
         };
 
         let ok = ClientAuthSignData::new(net_key, server_pk, shared_a)
@@ -316,7 +312,6 @@ impl ClientAuthPayload {
     }
 }
 
-
 /// ## Message 4 (Server to Client)
 pub struct ServerAccept(Vec<u8>);
 impl ServerAccept {
@@ -383,8 +378,9 @@ impl ServerAccept {
             let v = secretbox::open(&self.0, &zero_nonce(), &key)
                 .map_err(|_| HandshakeError::ServerAcceptOpenFailed)?;
 
-            ServerSignature(Signature::from_slice(&v)
-                            .ok_or(HandshakeError::ServerAcceptVerifyFailed)?)
+            ServerSignature(
+                Signature::from_slice(&v).ok_or(HandshakeError::ServerAcceptVerifyFailed)?,
+            )
         };
         // Note: this sig is computed earlier in ClientAuth::new(); could be stored.
         let client_sig = ClientAuthSignData::new(net_key, server_pk, shared_a).sign(&client_sk);

@@ -3,16 +3,9 @@ pub mod outcome;
 pub mod shared_secret;
 
 use ssb_crypto::{
-    handshake::{
-        EphPublicKey,
-        EphSecretKey,
-        generate_ephemeral_keypair,
-    },
-    PublicKey,
-    SecretKey,
-    Signature,
+    handshake::{generate_ephemeral_keypair, EphPublicKey, EphSecretKey},
+    PublicKey, SecretKey, Signature,
 };
-
 
 /// Client long-term public key
 #[derive(Clone)]
@@ -78,7 +71,6 @@ impl ServerEphPublicKey {
 
 /// Server ephemeral secret key
 pub struct ServerEphSecretKey(pub EphSecretKey);
-
 
 pub fn gen_client_eph_keypair() -> (ClientEphPublicKey, ClientEphSecretKey) {
     let (pk, sk) = generate_ephemeral_keypair();

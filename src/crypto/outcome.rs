@@ -1,13 +1,7 @@
-use crate::*;
 use super::message::ServerAcceptVerificationToken;
 use super::shared_secret::*;
-use ssb_crypto::{
-    hash::Digest,
-    hash::hash,
-    PublicKey,
-    NetworkKey,
-    secretbox,
-};
+use crate::*;
+use ssb_crypto::{hash::hash, hash::Digest, secretbox, NetworkKey, PublicKey};
 
 pub struct HandshakeOutcome {
     pub read_key: secretbox::Key,
@@ -46,7 +40,6 @@ impl HandshakeOutcome {
         shared_b: &SharedB,
         shared_c: &SharedC,
     ) -> HandshakeOutcome {
-
         HandshakeOutcome {
             read_key: client_to_server_key(&pk, &net_key, &shared_a, &shared_b, &shared_c),
             read_noncegen: NonceGen::new(&eph_pk.0, &net_key),
@@ -118,13 +111,7 @@ fn client_to_server_key(
     shared_b: &SharedB,
     shared_c: &SharedC,
 ) -> secretbox::Key {
-    build_shared_key(
-        &server_pk.0,
-        net_key,
-        shared_a,
-        shared_b,
-        shared_c,
-    )
+    build_shared_key(&server_pk.0, net_key, shared_a, shared_b, shared_c)
 }
 
 /// Final shared key used to seal and open secret boxes (server to client)
@@ -135,11 +122,5 @@ fn server_to_client_key(
     shared_b: &SharedB,
     shared_c: &SharedC,
 ) -> secretbox::Key {
-    build_shared_key(
-        &server_pk.0,
-        net_key,
-        shared_a,
-        shared_b,
-        shared_c,
-    )
+    build_shared_key(&server_pk.0, net_key, shared_a, shared_b, shared_c)
 }

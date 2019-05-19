@@ -1,12 +1,12 @@
 #![feature(async_await)]
 
-use std::env;
-use std::io::{stdin, stdout, Write};
 use futures::executor::block_on;
 use futures::io::AllowStdIo;
+use std::env;
+use std::io::{stdin, stdout, Write};
 
 use shs::*;
-use ssb_crypto::{PublicKey, SecretKey, NetworkKey};
+use ssb_crypto::{NetworkKey, PublicKey, SecretKey};
 
 extern crate readwrite;
 use readwrite::ReadWrite;
@@ -19,7 +19,6 @@ use hex::FromHex;
 // cargo build --example test_server --release
 // node ../shs1-testsuite/test-server.js target/release/examples/test_server
 fn main() -> Result<(), HandshakeError> {
-
     let args: Vec<String> = env::args().collect();
     if args.len() != 4 {
         println!("Usage: test_server net_id_hex server_sk_hex server_pk_hex");

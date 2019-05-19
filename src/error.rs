@@ -55,7 +55,7 @@ impl From<HandshakeError> for io::Error {
     fn from(err: HandshakeError) -> io::Error {
         match err {
             HandshakeError::Io(err) => err,
-            err => io::Error::new(io::ErrorKind::InvalidData, err)
+            err => io::Error::new(io::ErrorKind::InvalidData, err),
         }
     }
 }

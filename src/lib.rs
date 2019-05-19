@@ -5,52 +5,26 @@
 
 #![feature(async_await)]
 extern crate futures;
-#[macro_use] extern crate quick_error;
+#[macro_use]
+extern crate quick_error;
 extern crate ssb_crypto;
 
-use ssb_crypto::{
-    NetworkKey,
-    NonceGen,
-    PublicKey,
-    SecretKey,
-};
+use ssb_crypto::{NetworkKey, NonceGen, PublicKey, SecretKey};
 
-use futures::io::{
-    AsyncRead,
-    AsyncReadExt,
-    AsyncWrite,
-    AsyncWriteExt,
-};
 use core::mem::size_of;
+use futures::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 
 mod error;
 mod utils;
 pub use error::HandshakeError;
 pub mod crypto;
 use crypto::{
-    ClientEphPublicKey,
-    ClientPublicKey,
-    ClientSecretKey,
-
-    ServerEphPublicKey,
-    ServerPublicKey,
+    gen_client_eph_keypair, gen_server_eph_keypair,
+    message::{ClientAuth, ClientHello, ServerAccept, ServerHello},
+    outcome::HandshakeOutcome,
+    shared_secret::{SharedA, SharedB, SharedC},
+    ClientEphPublicKey, ClientPublicKey, ClientSecretKey, ServerEphPublicKey, ServerPublicKey,
     ServerSecretKey,
-
-    gen_client_eph_keypair,
-    gen_server_eph_keypair,
-
-    message::{
-        ClientAuth,
-        ClientHello,
-        ServerHello,
-        ServerAccept,
-    },
-    shared_secret::{
-        SharedA,
-        SharedB,
-        SharedC,
-    },
-    outcome::HandshakeOutcome
 };
 
 // TODO: memzero our secrets, if sodiumoxide doesn't do it for us.
@@ -61,9 +35,10 @@ pub async fn client<S>(
     net_key: NetworkKey,
     pk: PublicKey,
     sk: SecretKey,
-    server_pk: PublicKey)
-    -> Result<HandshakeOutcome, HandshakeError>
-where S: AsyncRead + AsyncWrite + Unpin
+    server_pk: PublicKey,
+) -> Result<HandshakeOutcome, HandshakeError>
+where
+    S: AsyncRead + AsyncWrite + Unpin,
 {
     let r = try_client_side(&mut stream, net_key, pk, sk, server_pk).await;
     if r.is_err() {
@@ -72,15 +47,16 @@ where S: AsyncRead + AsyncWrite + Unpin
     r
 }
 
-async fn try_client_side<S>(mut stream: S,
-                            net_key: NetworkKey,
-                            pk: PublicKey,
-                            sk: SecretKey,
-                            server_pk: PublicKey)
-                            -> Result<HandshakeOutcome, HandshakeError>
-where S: AsyncRead + AsyncWrite + Unpin
+async fn try_client_side<S>(
+    mut stream: S,
+    net_key: NetworkKey,
+    pk: PublicKey,
+    sk: SecretKey,
+    server_pk: PublicKey,
+) -> Result<HandshakeOutcome, HandshakeError>
+where
+    S: AsyncRead + AsyncWrite + Unpin,
 {
-
     let pk = ClientPublicKey(pk);
     let sk = ClientSecretKey(sk);
     let server_pk = ServerPublicKey(server_pk);
@@ -112,9 +88,9 @@ where S: AsyncRead + AsyncWrite + Unpin
     stream.read_exact(&mut buf).await?;
 
     let server_acc = ServerAccept::from_buffer(buf.to_vec())?;
-    let v = server_acc.open_and_verify(&sk, &pk, &server_pk,
-                                       &net_key, &shared_a,
-                                       &shared_b, &shared_c)?;
+    let v = server_acc.open_and_verify(
+        &sk, &pk, &server_pk, &net_key, &shared_a, &shared_b, &shared_c,
+    )?;
 
     Ok(HandshakeOutcome::client_side(
         v,
@@ -125,17 +101,19 @@ where S: AsyncRead + AsyncWrite + Unpin
         &net_key,
         &shared_a,
         &shared_b,
-        &shared_c
+        &shared_c,
     ))
 }
 
 /// Perform the server side of the handshake using the given `AsyncRead + AsyncWrite` stream.
-pub async fn server<S>(mut stream: S,
-                       net_key: NetworkKey,
-                       pk: PublicKey,
-                       sk: SecretKey)
-                       -> Result<HandshakeOutcome, HandshakeError>
-where S: AsyncRead + AsyncWrite + Unpin
+pub async fn server<S>(
+    mut stream: S,
+    net_key: NetworkKey,
+    pk: PublicKey,
+    sk: SecretKey,
+) -> Result<HandshakeOutcome, HandshakeError>
+where
+    S: AsyncRead + AsyncWrite + Unpin,
 {
     let r = try_server_side(&mut stream, net_key, pk, sk).await;
     if r.is_err() {
@@ -144,14 +122,15 @@ where S: AsyncRead + AsyncWrite + Unpin
     r
 }
 
-async fn try_server_side<S>(mut stream: S,
-                            net_key: NetworkKey,
-                            pk: PublicKey,
-                            sk: SecretKey)
-                            -> Result<HandshakeOutcome, HandshakeError>
-where S: AsyncRead + AsyncWrite + Unpin
+async fn try_server_side<S>(
+    mut stream: S,
+    net_key: NetworkKey,
+    pk: PublicKey,
+    sk: SecretKey,
+) -> Result<HandshakeOutcome, HandshakeError>
+where
+    S: AsyncRead + AsyncWrite + Unpin,
 {
-
     let pk = ServerPublicKey(pk);
     let sk = ServerSecretKey(sk);
 
@@ -187,8 +166,15 @@ where S: AsyncRead + AsyncWrite + Unpin
     let shared_c = SharedC::server_side(&eph_sk, &client_pk)?;
 
     // Send server accept
-    let server_acc = ServerAccept::new(&sk, &client_pk, &net_key, &client_sig,
-                                       &shared_a, &shared_b, &shared_c);
+    let server_acc = ServerAccept::new(
+        &sk,
+        &client_pk,
+        &net_key,
+        &client_sig,
+        &shared_a,
+        &shared_b,
+        &shared_c,
+    );
     stream.write_all(server_acc.as_slice()).await?;
     stream.flush().await?;
 
@@ -209,14 +195,14 @@ mod tests {
     extern crate futures_util;
 
     use super::*;
-    use core::task::Context;
     use core::pin::Pin;
+    use core::task::Context;
     use std::io::{self, ErrorKind};
 
     // For some reason, the futures::join macro is failing to resolve
     // (as of 2019-04-30 nightly).
-    use futures::{future::join, Poll};
     use futures::executor::block_on;
+    use futures::{future::join, Poll};
 
     extern crate async_ringbuffer;
     extern crate pin_utils;
@@ -235,7 +221,11 @@ mod tests {
     where
         R: AsyncRead + Unpin,
     {
-        fn poll_read(self: Pin<&mut Self>, cx: &mut Context, buf: &mut [u8]) -> Poll<Result<usize, io::Error>> {
+        fn poll_read(
+            self: Pin<&mut Self>,
+            cx: &mut Context,
+            buf: &mut [u8],
+        ) -> Poll<Result<usize, io::Error>> {
             self.r().poll_read(cx, buf)
         }
     }
@@ -243,7 +233,11 @@ mod tests {
     where
         W: AsyncWrite + Unpin,
     {
-        fn poll_write(self: Pin<&mut Self>, cx: &mut Context, buf: &[u8]) -> Poll<Result<usize, io::Error>> {
+        fn poll_write(
+            self: Pin<&mut Self>,
+            cx: &mut Context,
+            buf: &[u8],
+        ) -> Poll<Result<usize, io::Error>> {
             self.w().poll_write(cx, buf)
         }
         fn poll_flush(self: Pin<&mut Self>, cx: &mut Context) -> Poll<Result<(), io::Error>> {
@@ -273,9 +267,7 @@ mod tests {
         let client_side = client(&mut c_stream, net_key.clone(), c_pk, c_sk, s_pk.clone());
         let server_side = server(&mut s_stream, net_key.clone(), s_pk, s_sk);
 
-        let (c_out, s_out) = block_on(async {
-            join(client_side, server_side).await
-        });
+        let (c_out, s_out) = block_on(async { join(client_side, server_side).await });
 
         let mut c_out = c_out.unwrap();
         let mut s_out = s_out.unwrap();
@@ -283,11 +275,9 @@ mod tests {
         assert_eq!(c_out.write_key, s_out.read_key);
         assert_eq!(c_out.read_key, s_out.write_key);
 
-        assert_eq!(c_out.write_noncegen.next(),
-                   s_out.read_noncegen.next());
+        assert_eq!(c_out.write_noncegen.next(), s_out.read_noncegen.next());
 
-        assert_eq!(c_out.read_noncegen.next(),
-                   s_out.write_noncegen.next());
+        assert_eq!(c_out.read_noncegen.next(), s_out.write_noncegen.next());
     }
 
     fn is_eof_err<T>(r: &Result<T, HandshakeError>) -> bool {
@@ -303,16 +293,20 @@ mod tests {
         let (s_pk, s_sk) = generate_longterm_keypair();
         let (c_pk, c_sk) = generate_longterm_keypair();
 
-        let client_side = client(&mut c_stream, NetworkKey::random(), c_pk, c_sk, s_pk.clone());
+        let client_side = client(
+            &mut c_stream,
+            NetworkKey::random(),
+            c_pk,
+            c_sk,
+            s_pk.clone(),
+        );
         let server_side = server(&mut s_stream, NetworkKey::random(), s_pk, s_sk);
 
-        let (c_out, s_out) = block_on(async {
-            join(client_side, server_side).await
-        });
+        let (c_out, s_out) = block_on(async { join(client_side, server_side).await });
 
         assert!(is_eof_err(&c_out));
         match s_out {
-            Err(HandshakeError::ClientHelloVerifyFailed) => {},
+            Err(HandshakeError::ClientHelloVerifyFailed) => {}
             _ => panic!(),
         };
     }
@@ -320,9 +314,12 @@ mod tests {
     #[test]
     fn server_rejects_wrong_pk() {
         test_handshake_with_bad_server_pk(
-            PublicKey::from_slice(&[0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-		                    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-		                    0, 0, 0, 0, 0, 0, 0, 0, 0, 0]).unwrap());
+            PublicKey::from_slice(&[
+                0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                0, 0, 0, 0,
+            ])
+            .unwrap(),
+        );
 
         let (pk, _sk) = generate_longterm_keypair();
         test_handshake_with_bad_server_pk(pk);
@@ -338,9 +335,7 @@ mod tests {
         let client_side = client(&mut c_stream, net_key.clone(), c_pk, c_sk, bad_pk);
         let server_side = server(&mut s_stream, net_key.clone(), s_pk, s_sk);
 
-        let (c_out, s_out) = block_on(async {
-            join(client_side, server_side).await
-        });
+        let (c_out, s_out) = block_on(async { join(client_side, server_side).await });
 
         assert!(c_out.is_err());
         assert!(s_out.is_err());

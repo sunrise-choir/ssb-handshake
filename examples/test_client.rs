@@ -1,10 +1,10 @@
 #![feature(async_await)]
 
-use std::env;
-use std::io::{stdin, stdout, Write};
 use futures::executor::block_on;
 use futures::io::AllowStdIo;
 use shs::*;
+use std::env;
+use std::io::{stdin, stdout, Write};
 
 extern crate readwrite;
 use readwrite::ReadWrite;
@@ -17,7 +17,6 @@ use ssb_crypto::{generate_longterm_keypair, NetworkKey, PublicKey};
 
 // For use with https://github.com/AljoschaMeyer/shs1-testsuite
 fn main() -> Result<(), HandshakeError> {
-
     let args: Vec<String> = env::args().collect();
     if args.len() != 3 {
         println!("Usage: test_client net_id_as_hex server_pk_as_hex");
