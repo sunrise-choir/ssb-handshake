@@ -98,7 +98,7 @@ fn build_shared_key(
 
     SharedKeyData {
         double_hash,
-        pk: pk.clone(),
+        pk: *pk,
     }
     .into_key()
 }
