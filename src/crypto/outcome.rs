@@ -1,52 +1,46 @@
 use super::message::ServerAcceptVerificationToken;
 use super::shared_secret::*;
 use crate::*;
-use ssb_crypto::{hash::hash, hash::Digest, secretbox, NetworkKey, PublicKey};
+use ssb_crypto::{
+    handshake::HandshakeKeys, hash::hash, hash::Digest, secretbox, NetworkKey, PublicKey,
+};
 
-pub struct HandshakeOutcome {
-    pub read_key: secretbox::Key,
-    pub read_noncegen: NonceGen,
+pub fn client_side_handshake_keys(
+    _v: ServerAcceptVerificationToken,
+    pk: &ClientPublicKey,
+    server_pk: &ServerPublicKey,
+    eph_pk: &ClientEphPublicKey,
+    server_eph_pk: &ServerEphPublicKey,
+    net_key: &NetworkKey,
+    shared_a: &SharedA,
+    shared_b: &SharedB,
+    shared_c: &SharedC,
+) -> HandshakeKeys {
+    HandshakeKeys {
+        read_key: server_to_client_key(&pk, &net_key, &shared_a, &shared_b, &shared_c),
+        read_noncegen: NonceGen::new(&eph_pk.0, &net_key),
 
-    pub write_key: secretbox::Key,
-    pub write_noncegen: NonceGen,
-}
-impl HandshakeOutcome {
-    pub fn client_side(
-        _v: ServerAcceptVerificationToken,
-        pk: &ClientPublicKey,
-        server_pk: &ServerPublicKey,
-        eph_pk: &ClientEphPublicKey,
-        server_eph_pk: &ServerEphPublicKey,
-        net_key: &NetworkKey,
-        shared_a: &SharedA,
-        shared_b: &SharedB,
-        shared_c: &SharedC,
-    ) -> HandshakeOutcome {
-        HandshakeOutcome {
-            read_key: server_to_client_key(&pk, &net_key, &shared_a, &shared_b, &shared_c),
-            read_noncegen: NonceGen::new(&eph_pk.0, &net_key),
-
-            write_key: client_to_server_key(&server_pk, &net_key, &shared_a, &shared_b, &shared_c),
-            write_noncegen: NonceGen::new(&server_eph_pk.0, &net_key),
-        }
+        write_key: client_to_server_key(&server_pk, &net_key, &shared_a, &shared_b, &shared_c),
+        write_noncegen: NonceGen::new(&server_eph_pk.0, &net_key),
     }
-    pub fn server_side(
-        pk: &ServerPublicKey,
-        client_pk: &ClientPublicKey,
-        eph_pk: &ServerEphPublicKey,
-        client_eph_pk: &ClientEphPublicKey,
-        net_key: &NetworkKey,
-        shared_a: &SharedA,
-        shared_b: &SharedB,
-        shared_c: &SharedC,
-    ) -> HandshakeOutcome {
-        HandshakeOutcome {
-            read_key: client_to_server_key(&pk, &net_key, &shared_a, &shared_b, &shared_c),
-            read_noncegen: NonceGen::new(&eph_pk.0, &net_key),
+}
 
-            write_key: server_to_client_key(&client_pk, &net_key, &shared_a, &shared_b, &shared_c),
-            write_noncegen: NonceGen::new(&client_eph_pk.0, &net_key),
-        }
+pub fn server_side_handshake_keys(
+    pk: &ServerPublicKey,
+    client_pk: &ClientPublicKey,
+    eph_pk: &ServerEphPublicKey,
+    client_eph_pk: &ClientEphPublicKey,
+    net_key: &NetworkKey,
+    shared_a: &SharedA,
+    shared_b: &SharedB,
+    shared_c: &SharedC,
+) -> HandshakeKeys {
+    HandshakeKeys {
+        read_key: client_to_server_key(&pk, &net_key, &shared_a, &shared_b, &shared_c),
+        read_noncegen: NonceGen::new(&eph_pk.0, &net_key),
+
+        write_key: server_to_client_key(&client_pk, &net_key, &shared_a, &shared_b, &shared_c),
+        write_noncegen: NonceGen::new(&client_eph_pk.0, &net_key),
     }
 }
 

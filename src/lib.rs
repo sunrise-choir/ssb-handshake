@@ -9,7 +9,7 @@ extern crate futures;
 extern crate quick_error;
 extern crate ssb_crypto;
 
-use ssb_crypto::{NetworkKey, NonceGen, PublicKey, SecretKey};
+use ssb_crypto::{handshake::HandshakeKeys, NetworkKey, NonceGen, PublicKey, SecretKey};
 
 use core::mem::size_of;
 use futures::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
@@ -21,7 +21,8 @@ pub mod crypto;
 use crypto::{
     gen_client_eph_keypair, gen_server_eph_keypair,
     message::{ClientAuth, ClientHello, ServerAccept, ServerHello},
-    outcome::HandshakeOutcome,
+    outcome::client_side_handshake_keys,
+    outcome::server_side_handshake_keys,
     shared_secret::{SharedA, SharedB, SharedC},
     ClientEphPublicKey, ClientPublicKey, ClientSecretKey, ServerEphPublicKey, ServerPublicKey,
     ServerSecretKey,
@@ -36,7 +37,7 @@ pub async fn client<S>(
     pk: PublicKey,
     sk: SecretKey,
     server_pk: PublicKey,
-) -> Result<HandshakeOutcome, HandshakeError>
+) -> Result<HandshakeKeys, HandshakeError>
 where
     S: AsyncRead + AsyncWrite + Unpin,
 {
@@ -53,7 +54,7 @@ async fn try_client_side<S>(
     pk: PublicKey,
     sk: SecretKey,
     server_pk: PublicKey,
-) -> Result<HandshakeOutcome, HandshakeError>
+) -> Result<HandshakeKeys, HandshakeError>
 where
     S: AsyncRead + AsyncWrite + Unpin,
 {
@@ -92,7 +93,7 @@ where
         &sk, &pk, &server_pk, &net_key, &shared_a, &shared_b, &shared_c,
     )?;
 
-    Ok(HandshakeOutcome::client_side(
+    Ok(client_side_handshake_keys(
         v,
         &pk,
         &server_pk,
@@ -111,7 +112,7 @@ pub async fn server<S>(
     net_key: NetworkKey,
     pk: PublicKey,
     sk: SecretKey,
-) -> Result<HandshakeOutcome, HandshakeError>
+) -> Result<HandshakeKeys, HandshakeError>
 where
     S: AsyncRead + AsyncWrite + Unpin,
 {
@@ -127,7 +128,7 @@ async fn try_server_side<S>(
     net_key: NetworkKey,
     pk: PublicKey,
     sk: SecretKey,
-) -> Result<HandshakeOutcome, HandshakeError>
+) -> Result<HandshakeKeys, HandshakeError>
 where
     S: AsyncRead + AsyncWrite + Unpin,
 {
@@ -178,7 +179,7 @@ where
     stream.write_all(server_acc.as_slice()).await?;
     stream.flush().await?;
 
-    Ok(HandshakeOutcome::server_side(
+    Ok(server_side_handshake_keys(
         &pk,
         &client_pk,
         &eph_pk,

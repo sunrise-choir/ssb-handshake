@@ -5,8 +5,8 @@ use futures::io::AllowStdIo;
 use std::env;
 use std::io::{stdin, stdout, Write};
 
-use ssb_handshake::*;
 use ssb_crypto::{NetworkKey, PublicKey, SecretKey};
+use ssb_handshake::*;
 
 extern crate readwrite;
 use readwrite::ReadWrite;
