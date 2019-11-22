@@ -3,7 +3,6 @@
 //! ([repo](https://github.com/ssbc/scuttlebutt-protocol-guide)),
 //! which he graciously released into the public domain.
 
-#![feature(async_await)]
 extern crate futures;
 #[macro_use]
 extern crate quick_error;
@@ -203,7 +202,8 @@ mod tests {
     // For some reason, the futures::join macro is failing to resolve
     // (as of 2019-04-30 nightly).
     use futures::executor::block_on;
-    use futures::{future::join, Poll};
+    use futures::future::join;
+    use futures::task::Poll;
 
     extern crate async_ringbuffer;
     extern crate pin_utils;
