@@ -195,72 +195,18 @@ mod tests {
     extern crate futures_util;
 
     use super::*;
-    use core::pin::Pin;
-    use core::task::Context;
-    use std::io::{self, ErrorKind};
+    use std::io::ErrorKind;
 
-    // For some reason, the futures::join macro is failing to resolve
-    // (as of 2019-04-30 nightly).
     use futures::executor::block_on;
     use futures::future::join;
-    use futures::task::Poll;
 
     extern crate async_ringbuffer;
-    extern crate pin_utils;
-    use pin_utils::unsafe_pinned;
+    use async_ringbuffer::Duplex;
     use ssb_crypto::{generate_longterm_keypair, NetworkKey, PublicKey};
-
-    struct Duplex<R, W> {
-        r: R,
-        w: W,
-    }
-    impl<R, W> Duplex<R, W> {
-        unsafe_pinned!(r: R);
-        unsafe_pinned!(w: W);
-    }
-    impl<R, W> AsyncRead for Duplex<R, W>
-    where
-        R: AsyncRead + Unpin,
-    {
-        fn poll_read(
-            self: Pin<&mut Self>,
-            cx: &mut Context,
-            buf: &mut [u8],
-        ) -> Poll<Result<usize, io::Error>> {
-            self.r().poll_read(cx, buf)
-        }
-    }
-    impl<R, W> AsyncWrite for Duplex<R, W>
-    where
-        W: AsyncWrite + Unpin,
-    {
-        fn poll_write(
-            self: Pin<&mut Self>,
-            cx: &mut Context,
-            buf: &[u8],
-        ) -> Poll<Result<usize, io::Error>> {
-            self.w().poll_write(cx, buf)
-        }
-        fn poll_flush(self: Pin<&mut Self>, cx: &mut Context) -> Poll<Result<(), io::Error>> {
-            self.w().poll_flush(cx)
-        }
-        fn poll_close(self: Pin<&mut Self>, cx: &mut Context) -> Poll<Result<(), io::Error>> {
-            self.w().poll_close(cx)
-        }
-    }
-
-    type DuplexRingbufStream = Duplex<async_ringbuffer::Reader, async_ringbuffer::Writer>;
-
-    fn make_streams() -> (DuplexRingbufStream, DuplexRingbufStream) {
-        let (c2s_w, c2s_r) = async_ringbuffer::ring_buffer(1024);
-        let (s2c_w, s2c_r) = async_ringbuffer::ring_buffer(1024);
-
-        (Duplex { r: s2c_r, w: c2s_w }, Duplex { r: c2s_r, w: s2c_w })
-    }
 
     #[test]
     fn basic() {
-        let (mut c_stream, mut s_stream) = make_streams();
+        let (mut c_stream, mut s_stream) = Duplex::pair(1024);
         let (s_pk, s_sk) = generate_longterm_keypair();
         let (c_pk, c_sk) = generate_longterm_keypair();
 
@@ -290,7 +236,7 @@ mod tests {
 
     #[test]
     fn server_rejects_wrong_netkey() {
-        let (mut c_stream, mut s_stream) = make_streams();
+        let (mut c_stream, mut s_stream) = Duplex::pair(1024);
         let (s_pk, s_sk) = generate_longterm_keypair();
         let (c_pk, c_sk) = generate_longterm_keypair();
 
@@ -327,7 +273,7 @@ mod tests {
     }
 
     fn test_handshake_with_bad_server_pk(bad_pk: PublicKey) {
-        let (mut c_stream, mut s_stream) = make_streams();
+        let (mut c_stream, mut s_stream) = Duplex::pair(1024);
         let (s_pk, s_sk) = generate_longterm_keypair();
         let (c_pk, c_sk) = generate_longterm_keypair();
 
@@ -341,5 +287,4 @@ mod tests {
         assert!(c_out.is_err());
         assert!(s_out.is_err());
     }
-
 }
