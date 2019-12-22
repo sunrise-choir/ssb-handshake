@@ -16,7 +16,7 @@ quick-error = "1.2.2"
 ssb-crypto = "0.1.4"
 
 [dev-dependencies]
-async-ringbuffer = { version = "~0.5.4", path = "../async-ringbuffer" }
+async-ringbuffer = "0.5.4"
 hex = "0.4.0"
 futures-util = "0.3.1"
 readwrite = "0.1.1"
