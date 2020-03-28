@@ -111,7 +111,7 @@ pub async fn server<S>(
     net_key: NetworkKey,
     pk: PublicKey,
     sk: SecretKey,
-) -> Result<HandshakeKeys, HandshakeError>
+) -> Result<(HandshakeKeys, PublicKey), HandshakeError>
 where
     S: AsyncRead + AsyncWrite + Unpin,
 {
@@ -127,7 +127,7 @@ async fn try_server_side<S>(
     net_key: NetworkKey,
     pk: PublicKey,
     sk: SecretKey,
-) -> Result<HandshakeKeys, HandshakeError>
+) -> Result<(HandshakeKeys, PublicKey), HandshakeError>
 where
     S: AsyncRead + AsyncWrite + Unpin,
 {
@@ -178,7 +178,7 @@ where
     stream.write_all(server_acc.as_slice()).await?;
     stream.flush().await?;
 
-    Ok(server_side_handshake_keys(
+    Ok((server_side_handshake_keys(
         &pk,
         &client_pk,
         &eph_pk,
@@ -187,7 +187,7 @@ where
         &shared_a,
         &shared_b,
         &shared_c,
-    ))
+    ), client_pk.into_inner()))
 }
 
 #[cfg(test)]

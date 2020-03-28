@@ -14,6 +14,9 @@ impl ClientPublicKey {
     pub fn from_slice(b: &[u8]) -> Option<ClientPublicKey> {
         Some(ClientPublicKey(PublicKey::from_slice(b)?))
     }
+    pub fn into_inner(self) -> PublicKey{
+        self.0
+    }
 }
 
 /// Client long-term secret key
