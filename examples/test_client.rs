@@ -11,7 +11,7 @@ extern crate hex;
 use hex::FromHex;
 
 extern crate ssb_crypto;
-use ssb_crypto::{generate_longterm_keypair, NetworkKey, PublicKey};
+use ssb_crypto::{Keypair, NetworkKey, PublicKey};
 
 // For use with https://github.com/AljoschaMeyer/shs1-testsuite
 fn main() -> Result<(), HandshakeError> {
@@ -24,15 +24,15 @@ fn main() -> Result<(), HandshakeError> {
     let net_key = NetworkKey::from_slice(&Vec::from_hex(&args[1]).unwrap()).unwrap();
     let server_pk = PublicKey::from_slice(&Vec::from_hex(&args[2]).unwrap()).unwrap();
 
-    let (pk, sk) = generate_longterm_keypair();
+    let key = Keypair::generate();
 
     let mut stream = AllowStdIo::new(ReadWrite::new(stdin(), stdout()));
-    let mut o = block_on(client(&mut stream, net_key, pk, sk, server_pk))?;
+    let o = block_on(client_side(&mut stream, &net_key, &key, &server_pk))?;
 
-    let mut v = o.write_key[..].to_vec();
-    v.extend_from_slice(&o.write_noncegen.next()[..]);
-    v.extend_from_slice(&o.read_key[..]);
-    v.extend_from_slice(&o.read_noncegen.next()[..]);
+    let mut v = o.write_key.0.to_vec();
+    v.extend_from_slice(&o.write_starting_nonce.0);
+    v.extend_from_slice(&o.read_key.0);
+    v.extend_from_slice(&o.read_starting_nonce.0);
     assert_eq!(v.len(), 112);
 
     stdout().write(&v).unwrap();

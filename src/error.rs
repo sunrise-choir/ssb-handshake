@@ -1,61 +1,34 @@
 use std::io;
+use thiserror::Error;
 
-quick_error! {
-    #[derive(Debug)]
-    pub enum HandshakeError {
-        Io(err: io::Error) {
-            description(err.description())
-        }
-
-        ClientHelloDeserializeFailed {
-            description("Failed to read client hello message")
-        }
-        ClientHelloVerifyFailed {
-            description("Failed to verify client hello message")
-        }
-
-        ServerHelloDeserializeFailed {
-            description("Failed to read server hello message")
-        }
-        ServerHelloVerifyFailed {
-            description("Failed to verify server hello message")
-        }
-
-        ClientAuthDeserializeFailed {
-            description("Failed to read client auth message")
-        }
-        ClientAuthOpenFailed {
-            description("Failed to decrypt client auth message")
-        }
-        ClientAuthVerifyFailed {
-            description("Failed to verify client auth message")
-        }
-
-        ServerAcceptDeserializeFailed {
-            description("Failed to read server accept message")
-        }
-        ServerAcceptOpenFailed {
-            description("Failed to decrypt server accept message")
-        }
-        ServerAcceptVerifyFailed {
-            description("Failed to verify server accept message")
-        }
-
-        SharedAInvalid {}
-        SharedBInvalid {}
-        SharedCInvalid {}
-    }
-}
-impl From<io::Error> for HandshakeError {
-    fn from(err: io::Error) -> HandshakeError {
-        HandshakeError::Io(err)
-    }
-}
-impl From<HandshakeError> for io::Error {
-    fn from(err: HandshakeError) -> io::Error {
-        match err {
-            HandshakeError::Io(err) => err,
-            err => io::Error::new(io::ErrorKind::InvalidData, err),
-        }
-    }
+#[derive(Debug, Error)]
+pub enum HandshakeError {
+    #[error("IO error")]
+    Io(#[from] io::Error),
+    #[error("Failed to read client hello message")]
+    ClientHelloDeserializeFailed,
+    #[error("Failed to verify client hello message")]
+    ClientHelloVerifyFailed,
+    #[error("Failed to read server hello message")]
+    ServerHelloDeserializeFailed,
+    #[error("Failed to verify server hello message")]
+    ServerHelloVerifyFailed,
+    #[error("Failed to read client auth message")]
+    ClientAuthDeserializeFailed,
+    #[error("Failed to decrypt client auth message")]
+    ClientAuthOpenFailed,
+    #[error("Failed to verify client auth message")]
+    ClientAuthVerifyFailed,
+    #[error("Failed to read server accept message")]
+    ServerAcceptDeserializeFailed,
+    #[error("Failed to decrypt server accept message")]
+    ServerAcceptOpenFailed,
+    #[error("Failed to verify server accept message")]
+    ServerAcceptVerifyFailed,
+    #[error("Shared secret A is invalid")]
+    SharedAInvalid,
+    #[error("Shared secret B is invalid")]
+    SharedBInvalid,
+    #[error("Shared secret C is invalid")]
+    SharedCInvalid,
 }

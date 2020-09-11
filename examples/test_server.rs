@@ -3,7 +3,7 @@ use futures::io::AllowStdIo;
 use std::env;
 use std::io::{stdin, stdout, Write};
 
-use ssb_crypto::{NetworkKey, PublicKey, SecretKey};
+use ssb_crypto::{Keypair, NetworkKey, PublicKey};
 use ssb_handshake::*;
 
 extern crate readwrite;
@@ -24,16 +24,17 @@ fn main() -> Result<(), HandshakeError> {
     }
 
     let net_key = NetworkKey::from_slice(&Vec::from_hex(&args[1]).unwrap()).unwrap();
-    let sk = SecretKey::from_slice(&Vec::from_hex(&args[2]).unwrap()).unwrap();
+    let key = Keypair::from_slice(&Vec::from_hex(&args[2]).unwrap()).unwrap();
     let pk = PublicKey::from_slice(&Vec::from_hex(&args[3]).unwrap()).unwrap();
+    assert_eq!(key.public, pk);
 
     let mut stream = AllowStdIo::new(ReadWrite::new(stdin(), stdout()));
-    let mut o = block_on(server(&mut stream, net_key, pk, sk))?;
+    let o = block_on(server_side(&mut stream, &net_key, &key))?;
 
-    let mut v = o.write_key[..].to_vec();
-    v.extend_from_slice(&o.write_noncegen.next()[..]);
-    v.extend_from_slice(&o.read_key[..]);
-    v.extend_from_slice(&o.read_noncegen.next()[..]);
+    let mut v = o.write_key.0.to_vec();
+    v.extend_from_slice(&o.write_starting_nonce.0);
+    v.extend_from_slice(&o.read_key.0);
+    v.extend_from_slice(&o.read_starting_nonce.0);
     assert_eq!(v.len(), 112);
 
     stdout().write(&v).unwrap();

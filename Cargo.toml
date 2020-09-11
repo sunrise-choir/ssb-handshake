@@ -9,14 +9,17 @@ repository = "https://github.com/sunrise-choir/ssb-handshake"
 documentation = "https://docs.rs/ssb-handshake/"
 readme = "README.md"
 keywords = ["secret-handshake", "handshake", "ssb", "scuttlebutt", "shs"]
+include = ["src/**/*", "LICENSE", "README.md"]
 
 [dependencies]
-futures = "0.3.1"
-quick-error = "1.2.2"
-ssb-crypto = "0.1.4"
+futures-io = "0.3.5"
+futures-util = "0.3.5"
+ssb-crypto = { version = "0.2.0" }
+zerocopy = "0.3.0"
+thiserror = "1.0.20"
 
 [dev-dependencies]
 async-ringbuffer = "0.5.4"
 hex = "0.4.0"
-futures-util = "0.3.1"
+futures = "0.3.5"
 readwrite = "0.1.1"

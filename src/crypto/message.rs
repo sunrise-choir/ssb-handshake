@@ -1,124 +1,61 @@
-use core::mem::size_of;
+//! Message payloads that are sent between the client and server.
+//!
+//! These are implemented as #[repr(C, packed)] structs; the byte slice
+//! representation of each struct is used directly for signing, etc,
+//! rather than explicitly creating a buffer and copying the bytes of
+//! each part of the message into it.
 
+use crate::bytes::as_ref;
+use crate::crypto::{keys::*, shared_secret::*};
 use crate::error::HandshakeError;
-use crate::utils::{bytes, zero_nonce};
 
-use super::shared_secret::*;
-use super::*;
-
-use ssb_crypto::{
-    secretbox,
-    sign_detached,
-    verify_detached,
-    AuthTag,
-    NetworkKey,
-    // KeyPair,
-    PublicKey,
-    Signature,
-};
-
-use ssb_crypto::hash::hash;
+use ssb_crypto::hash;
+use ssb_crypto::secretbox::{self, Hmac, Nonce};
+use ssb_crypto::{Keypair, NetworkAuth, NetworkKey, Signature};
+use zerocopy::{AsBytes, FromBytes};
 
 /// ## Message 1 (Client to Server)
 /// Client proves that it knows the NetworkKey,
 /// and sends its ephemeral public key.
-#[repr(C, packed)]
-pub struct ClientHello {
-    hmac: AuthTag,
-    eph_pk: ClientEphPublicKey,
-}
+#[derive(AsBytes, FromBytes)]
+#[repr(C)]
+pub struct ClientHello(NetworkAuth, ClientEphPublicKey);
 
 impl ClientHello {
-    pub const fn size() -> usize {
-        size_of::<ClientHello>()
-    }
-
     // concat(nacl_auth(msg: client_ephemeral_pk,
     //                  key: network_identifier),
     //        client_ephemeral_pk)
     pub fn new(eph_pk: &ClientEphPublicKey, net_key: &NetworkKey) -> ClientHello {
-        ClientHello {
-            hmac: net_key.authenticate(&eph_pk.0[..]),
-            eph_pk: eph_pk.clone(),
-        }
-    }
-
-    // client_hmac = first_32_bytes(msg1)
-    // client_ephemeral_pk = last_32_bytes(msg1)
-    pub fn from_slice(b: &[u8]) -> Result<ClientHello, HandshakeError> {
-        if b.len() == size_of::<ClientHello>() {
-            let (hmac_bytes, pk_bytes) = b.split_at(size_of::<AuthTag>());
-
-            Ok(ClientHello {
-                hmac: AuthTag::from_slice(&hmac_bytes)
-                    .ok_or(HandshakeError::ClientHelloDeserializeFailed)?,
-
-                eph_pk: ClientEphPublicKey::from_slice(&pk_bytes)
-                    .ok_or(HandshakeError::ClientHelloDeserializeFailed)?,
-            })
-        } else {
-            Err(HandshakeError::ClientHelloDeserializeFailed)
-        }
+        ClientHello(net_key.authenticate(eph_pk.as_bytes()), *eph_pk)
     }
 
     // assert_nacl_auth_verify(
     //   authenticator: client_hmac,
     //   msg: client_ephemeral_pk,
     //   key: network_identifier)
-    pub fn verify(self, net_key: &NetworkKey) -> Result<ClientEphPublicKey, HandshakeError> {
-        if net_key.verify(&self.hmac, &self.eph_pk.0[..]) {
-            Ok(self.eph_pk.clone())
+    pub fn verify(&self, net_key: &NetworkKey) -> Result<ClientEphPublicKey, HandshakeError> {
+        let ClientHello(hmac, eph_pk) = self;
+        if net_key.verify(hmac, eph_pk.as_bytes()) {
+            Ok(*eph_pk)
         } else {
             Err(HandshakeError::ClientHelloVerifyFailed)
         }
-    }
-
-    pub fn as_slice(&self) -> &[u8] {
-        unsafe { bytes(self) }
-    }
-    pub fn to_vec(&self) -> Vec<u8> {
-        self.as_slice().to_vec()
     }
 }
 
 /// ## Message 2 (Server to Client)
 /// Server proves that it knows the NetworkKey,
 /// and sends its ephemeral public key.
-#[repr(C, packed)]
-pub struct ServerHello {
-    hmac: AuthTag,
-    eph_pk: ServerEphPublicKey,
-}
+#[derive(AsBytes, FromBytes)]
+#[repr(C)]
+pub struct ServerHello(NetworkAuth, ServerEphPublicKey);
 
 impl ServerHello {
-    pub const fn size() -> usize {
-        size_of::<ServerHello>()
-    }
-
     // concat(nacl_auth(msg: server_ephemeral_pk,
     //                  key: network_identifier),
     //        server_ephemeral_pk)
     pub fn new(eph_pk: &ServerEphPublicKey, net_key: &NetworkKey) -> ServerHello {
-        ServerHello {
-            hmac: net_key.authenticate(&eph_pk.0[..]),
-            eph_pk: eph_pk.clone(),
-        }
-    }
-
-    // server_hmac = first_32_bytes(msg2)
-    // server_ephemeral_pk = last_32_bytes(msg2)
-    pub fn from_slice(b: &[u8]) -> Result<ServerHello, HandshakeError> {
-        if b.len() == size_of::<ServerHello>() {
-            let (hmac_bytes, pk_bytes) = b.split_at(size_of::<AuthTag>());
-            Ok(ServerHello {
-                hmac: AuthTag::from_slice(&hmac_bytes)
-                    .ok_or(HandshakeError::ServerHelloDeserializeFailed)?,
-                eph_pk: ServerEphPublicKey::from_slice(&pk_bytes)
-                    .ok_or(HandshakeError::ServerHelloDeserializeFailed)?,
-            })
-        } else {
-            Err(HandshakeError::ServerHelloDeserializeFailed)
-        }
+        ServerHello(net_key.authenticate(eph_pk.as_bytes()), *eph_pk)
     }
 
     // assert_nacl_auth_verify(
@@ -126,29 +63,20 @@ impl ServerHello {
     //   msg: server_ephemeral_pk,
     //   key: network_identifier
     // )
-    pub fn verify(self, net_key: &NetworkKey) -> Result<ServerEphPublicKey, HandshakeError> {
-        if net_key.verify(&self.hmac, &self.eph_pk.0[..]) {
-            Ok(self.eph_pk.clone())
+    pub fn verify(&self, net_key: &NetworkKey) -> Result<ServerEphPublicKey, HandshakeError> {
+        let ServerHello(hmac, eph_pk) = self;
+        if net_key.verify(hmac, eph_pk.as_bytes()) {
+            Ok(*eph_pk)
         } else {
             Err(HandshakeError::ServerHelloVerifyFailed)
         }
     }
-
-    pub fn as_slice(&self) -> &[u8] {
-        unsafe { bytes(self) }
-    }
-    pub fn to_vec(&self) -> Vec<u8> {
-        self.as_slice().to_vec()
-    }
 }
 
 /// ## Message 3 (Client to Server)
-pub struct ClientAuth(Vec<u8>);
+#[repr(C)]
+pub struct ClientAuth(Hmac, [u8; 96]);
 impl ClientAuth {
-    pub const fn size() -> usize {
-        112
-    }
-
     // detached_signature_A = nacl_sign_detached(
     //   msg: concat(
     //     network_identifier,
@@ -172,275 +100,142 @@ impl ClientAuth {
     //   )
     // )
     pub fn new(
-        sk: &ClientSecretKey,
-        pk: &ClientPublicKey,
+        kp: &Keypair,
         server_pk: &ServerPublicKey,
         net_key: &NetworkKey,
-        shared_a: &SharedA,
-        shared_b: &SharedB,
+        sa: &SharedA,
+        sb: &SharedB,
     ) -> ClientAuth {
-        let client_sig = ClientAuthSignData::new(net_key, server_pk, shared_a).sign(&sk);
+        let payload = ClientAuthPayload(
+            ClientSignature(
+                kp.sign(ClientAuthSignData(net_key.clone(), *server_pk, sa.hash()).as_bytes()),
+            ),
+            ClientPublicKey(kp.public),
+        );
+        let mut buf = [0; 96];
+        buf.copy_from_slice(payload.as_bytes());
 
-        let payload = ClientAuthPayload {
-            client_sig,
-            client_pk: pk.clone(),
-        };
-
-        let key = ClientAuthKeyData {
-            net_key: net_key.clone(),
-            shared_a: shared_a.clone(),
-            shared_b: shared_b.clone(),
-        }
-        .into_key();
-        let v = secretbox::seal(payload.as_slice(), &zero_nonce(), &key);
-        ClientAuth(v)
+        let hmac = client_auth_key(net_key, sa, sb).seal(&mut buf, &Nonce::zero());
+        ClientAuth(hmac, buf)
     }
 
-    pub fn from_buffer(b: Vec<u8>) -> Result<ClientAuth, HandshakeError> {
-        if b.len() == ClientAuth::size() {
-            Ok(ClientAuth(b))
-        } else {
-            Err(HandshakeError::ClientAuthDeserializeFailed)
-        }
-    }
-
-    pub fn open_and_verify(
-        self,
-        server_pk: &ServerPublicKey,
+    pub fn verify(
+        &mut self,
+        kp: &Keypair,
         net_key: &NetworkKey,
-        shared_a: &SharedA,
-        shared_b: &SharedB,
+        sa: &SharedA,
+        sb: &SharedB,
     ) -> Result<(ClientSignature, ClientPublicKey), HandshakeError> {
-        // TODO: return Result<_, ClientAuthUnsealError>
-        // Open the box
-        let payload = {
-            let key = ClientAuthKeyData {
-                net_key: net_key.clone(),
-                shared_a: shared_a.clone(),
-                shared_b: shared_b.clone(),
-            }
-            .into_key();
-            let v = secretbox::open(&self.0, &zero_nonce(), &key)
-                .map_err(|_| HandshakeError::ClientAuthOpenFailed)?;
-            ClientAuthPayload::from_slice(&v).ok_or(HandshakeError::ClientAuthVerifyFailed)?
-        };
+        let ClientAuth(hmac, buf) = self;
+        if !client_auth_key(net_key, sa, sb).open(buf, &hmac, &Nonce::zero()) {
+            return Err(HandshakeError::ClientAuthOpenFailed);
+        }
 
-        let ok = ClientAuthSignData::new(net_key, server_pk, shared_a)
-            .verify(&payload.client_sig, &payload.client_pk);
-        if ok {
-            Ok((payload.client_sig, payload.client_pk))
+        let ClientAuthPayload(sig, client_pk) = as_ref(buf);
+        let signdata = ClientAuthSignData(net_key.clone(), ServerPublicKey(kp.public), sa.hash());
+        if client_pk.0.verify(&sig.0, signdata.as_bytes()) {
+            Ok((*sig, *client_pk))
         } else {
             Err(HandshakeError::ClientAuthVerifyFailed)
         }
     }
-
-    pub fn as_slice(&self) -> &[u8] {
-        self.0.as_slice()
-    }
-    pub fn to_vec(&self) -> Vec<u8> {
-        self.0.clone()
-    }
 }
 
-#[repr(C, packed)]
-struct ClientAuthSignData {
-    net_key: NetworkKey,
-    server_pk: ServerPublicKey,
-    hash: SharedAHash,
+unsafe impl AsBytes for ClientAuth {
+    fn only_derive_is_allowed_to_implement_this_trait() {}
+}
+unsafe impl FromBytes for ClientAuth {
+    fn only_derive_is_allowed_to_implement_this_trait() {}
 }
 
-impl ClientAuthSignData {
-    fn new(
-        net_key: &NetworkKey,
-        server_pk: &ServerPublicKey,
-        shared_a: &SharedA,
-    ) -> ClientAuthSignData {
-        ClientAuthSignData {
-            net_key: net_key.clone(),
-            server_pk: server_pk.clone(),
-            hash: shared_a.hash(),
-        }
-    }
+#[derive(AsBytes)]
+#[repr(C)]
+struct ClientAuthSignData(NetworkKey, ServerPublicKey, SharedAHash);
 
-    fn sign(self, sk: &ClientSecretKey) -> ClientSignature {
-        ClientSignature(sign_detached(self.as_slice(), &sk.0))
-    }
+fn client_auth_key(net_key: &NetworkKey, sa: &SharedA, sb: &SharedB) -> secretbox::Key {
+    #[derive(AsBytes)]
+    #[repr(C)]
+    struct D(NetworkKey, SharedA, SharedB);
 
-    fn verify(self, sig: &ClientSignature, pk: &ClientPublicKey) -> bool {
-        verify_detached(&sig.0, self.as_slice(), &pk.0)
-    }
-
-    fn as_slice(&self) -> &[u8] {
-        unsafe { bytes(self) }
-    }
+    secretbox::Key(hash(D(net_key.clone(), sa.clone(), sb.clone()).as_bytes()).0)
 }
 
-#[repr(C, packed)]
-struct ClientAuthKeyData {
-    net_key: NetworkKey,
-    shared_a: SharedA,
-    shared_b: SharedB,
-}
-impl ClientAuthKeyData {
-    fn into_key(self) -> secretbox::Key {
-        let digest = unsafe { hash(bytes(&self)) };
-        secretbox::Key::from_slice(&digest[..]).unwrap()
-    }
-}
-
-#[repr(C, packed)]
-struct ClientAuthPayload {
-    client_sig: ClientSignature,
-    client_pk: ClientPublicKey,
-}
-
-impl ClientAuthPayload {
-    pub fn from_slice(b: &[u8]) -> Option<ClientAuthPayload> {
-        if b.len() == size_of::<ClientAuthPayload>() {
-            let (sig_bytes, pk_bytes) = b.split_at(size_of::<Signature>());
-            Some(ClientAuthPayload {
-                client_sig: ClientSignature(Signature::from_slice(&sig_bytes)?),
-                client_pk: ClientPublicKey(PublicKey::from_slice(pk_bytes)?),
-            })
-        } else {
-            None
-        }
-    }
-
-    fn as_slice(&self) -> &[u8] {
-        unsafe { bytes(self) }
-    }
-}
+#[derive(AsBytes, FromBytes)]
+#[repr(C)]
+struct ClientAuthPayload(ClientSignature, ClientPublicKey);
 
 /// ## Message 4 (Server to Client)
-pub struct ServerAccept(Vec<u8>);
+#[derive(AsBytes, FromBytes)]
+#[repr(C)]
+pub struct ServerAccept(Hmac, [u8; 64]);
 impl ServerAccept {
-    pub const fn size() -> usize {
-        80
-    }
-
     pub fn new(
-        sk: &ServerSecretKey,
+        kp: &Keypair,
         client_pk: &ClientPublicKey,
         net_key: &NetworkKey,
         client_sig: &ClientSignature,
-        shared_a: &SharedA,
-        shared_b: &SharedB,
-        shared_c: &SharedC,
+        sa: &SharedA,
+        sb: &SharedB,
+        sc: &SharedC,
     ) -> ServerAccept {
-        let sig = ServerAcceptSignData {
-            net_key: net_key.clone(),
-            sig: client_sig.clone(),
-            client_pk: client_pk.clone(),
-            hash: shared_a.hash(),
-        }
-        .sign(sk);
+        let Signature(mut sig) = kp.sign(
+            ServerAcceptSignData(net_key.clone(), *client_sig, *client_pk, sa.hash()).as_bytes(),
+        );
 
-        let key = ServerAcceptKeyData {
-            net_key: net_key.clone(),
-            shared_a: shared_a.clone(),
-            shared_b: shared_b.clone(),
-            shared_c: shared_c.clone(),
-        }
-        .into_key();
-
-        ServerAccept(secretbox::seal(&sig.0[..], &zero_nonce(), &key))
+        let hmac = server_accept_key(net_key, sa, sb, sc).seal(&mut sig, &Nonce::zero());
+        ServerAccept(hmac, sig)
     }
 
-    pub fn from_buffer(b: Vec<u8>) -> Result<ServerAccept, HandshakeError> {
-        if b.len() == ServerAccept::size() {
-            Ok(ServerAccept(b))
-        } else {
-            Err(HandshakeError::ServerAcceptDeserializeFailed)
-        }
-    }
-
-    #[must_use]
-    pub fn open_and_verify(
-        self,
-        client_sk: &ClientSecretKey,
-        client_pk: &ClientPublicKey,
+    /// Performed by the client
+    pub fn verify(
+        &self,
+        kp: &Keypair,
         server_pk: &ServerPublicKey,
         net_key: &NetworkKey,
-        shared_a: &SharedA,
-        shared_b: &SharedB,
-        shared_c: &SharedC,
-    ) -> Result<ServerAcceptVerificationToken, HandshakeError> {
+        sa: &SharedA,
+        sb: &SharedB,
+        sc: &SharedC,
+    ) -> Result<(), HandshakeError> {
         let server_sig = {
-            let key = ServerAcceptKeyData {
-                net_key: net_key.clone(),
-                shared_a: shared_a.clone(),
-                shared_b: shared_b.clone(),
-                shared_c: shared_c.clone(),
+            let ServerAccept(hmac, mut buf) = self;
+            if !server_accept_key(net_key, sa, sb, sc).open(&mut buf, &hmac, &Nonce::zero()) {
+                return Err(HandshakeError::ServerAcceptOpenFailed);
             }
-            .into_key();
-
-            let v = secretbox::open(&self.0, &zero_nonce(), &key)
-                .map_err(|_| HandshakeError::ServerAcceptOpenFailed)?;
-
-            ServerSignature(
-                Signature::from_slice(&v).ok_or(HandshakeError::ServerAcceptVerifyFailed)?,
-            )
+            ServerSignature(Signature(buf))
         };
-        // Note: this sig is computed earlier in ClientAuth::new(); could be stored.
-        let client_sig = ClientAuthSignData::new(net_key, server_pk, shared_a).sign(&client_sk);
+        let client_sig = ClientSignature(
+            kp.sign(ClientAuthSignData(net_key.clone(), *server_pk, sa.hash()).as_bytes()),
+        );
 
-        let ok = ServerAcceptSignData {
-            net_key: net_key.clone(),
-            sig: client_sig,
-            client_pk: client_pk.clone(),
-            hash: shared_a.hash(),
-        }
-        .verify(&server_sig, server_pk);
-        if ok {
-            Ok(ServerAcceptVerificationToken(0))
+        if server_pk.0.verify(
+            &server_sig.0,
+            ServerAcceptSignData(
+                net_key.clone(),
+                client_sig,
+                ClientPublicKey(kp.public),
+                sa.hash(),
+            )
+            .as_bytes(),
+        ) {
+            Ok(())
         } else {
             Err(HandshakeError::ServerAcceptVerifyFailed)
         }
     }
-
-    pub fn as_slice(&self) -> &[u8] {
-        self.0.as_slice()
-    }
-    pub fn to_vec(&self) -> Vec<u8> {
-        self.0.clone()
-    }
 }
 
-pub struct ServerAcceptVerificationToken(u8);
+#[derive(AsBytes)]
+#[repr(C)]
+struct ServerAcceptSignData(NetworkKey, ClientSignature, ClientPublicKey, SharedAHash);
 
-#[repr(C, packed)]
-struct ServerAcceptSignData {
-    net_key: NetworkKey,
-    sig: ClientSignature, // detached_signature_A
-    client_pk: ClientPublicKey,
-    hash: SharedAHash,
-}
-
-impl ServerAcceptSignData {
-    fn sign(self, sk: &ServerSecretKey) -> Signature {
-        sign_detached(self.as_slice(), &sk.0)
-    }
-
-    fn verify(self, sig: &ServerSignature, pk: &ServerPublicKey) -> bool {
-        verify_detached(&sig.0, self.as_slice(), &pk.0)
-    }
-
-    fn as_slice(&self) -> &[u8] {
-        unsafe { bytes(self) }
-    }
-}
-
-#[repr(C, packed)]
-struct ServerAcceptKeyData {
-    net_key: NetworkKey,
-    shared_a: SharedA,
-    shared_b: SharedB,
-    shared_c: SharedC,
-}
-impl ServerAcceptKeyData {
-    fn into_key(self) -> secretbox::Key {
-        let digest = unsafe { hash(bytes(&self)) };
-        secretbox::Key::from_slice(&digest[..]).unwrap()
-    }
+fn server_accept_key(
+    net_key: &NetworkKey,
+    a: &SharedA,
+    b: &SharedB,
+    c: &SharedC,
+) -> secretbox::Key {
+    #[derive(AsBytes)]
+    #[repr(C)]
+    struct D(NetworkKey, SharedA, SharedB, SharedC);
+    secretbox::Key(hash(D(net_key.clone(), a.clone(), b.clone(), c.clone()).as_bytes()).0)
 }
