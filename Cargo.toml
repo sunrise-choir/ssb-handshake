@@ -11,12 +11,16 @@ readme = "README.md"
 keywords = ["secret-handshake", "handshake", "ssb", "scuttlebutt", "shs"]
 include = ["src/**/*", "LICENSE", "README.md"]
 
+[features]
+default = ["std"]
+std = ["futures-io", "futures-util", "ssb-crypto/getrandom", "genio/std"]
+
 [dependencies]
-futures-io = "0.3.5"
-futures-util = "0.3.5"
-ssb-crypto = { version = "0.2.0" }
+futures-io = { version = "0.3.5", optional = true }
+futures-util = { version = "0.3.5", optional = true }
+ssb-crypto = { version = "0.2.0", default-features = false, features = ["dalek"] }
 zerocopy = "0.3.0"
-thiserror = "1.0.20"
+genio = { version = "0.2.1", default-features = false }
 
 [dev-dependencies]
 async-ringbuffer = "0.5.4"

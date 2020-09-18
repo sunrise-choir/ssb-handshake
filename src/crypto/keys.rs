@@ -1,5 +1,5 @@
 use crate::bytes::{AsBytes, FromBytes};
-use ssb_crypto::ephemeral::{generate_ephemeral_keypair, EphPublicKey, EphSecretKey};
+use ssb_crypto::ephemeral::{EphPublicKey, EphSecretKey};
 use ssb_crypto::{PublicKey, Signature};
 
 /// Client's long-term public key.
@@ -35,13 +35,3 @@ pub struct ServerEphPublicKey(pub EphPublicKey);
 
 /// Server ephemeral secret key
 pub struct ServerEphSecretKey(pub EphSecretKey);
-
-pub fn gen_client_eph_keypair() -> (ClientEphPublicKey, ClientEphSecretKey) {
-    let (pk, sk) = generate_ephemeral_keypair();
-    (ClientEphPublicKey(pk), ClientEphSecretKey(sk))
-}
-
-pub fn gen_server_eph_keypair() -> (ServerEphPublicKey, ServerEphSecretKey) {
-    let (pk, sk) = generate_ephemeral_keypair();
-    (ServerEphPublicKey(pk), ServerEphSecretKey(sk))
-}

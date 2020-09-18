@@ -2,7 +2,7 @@ use futures::executor::block_on;
 use futures::io::AllowStdIo;
 use ssb_handshake::*;
 use std::env;
-use std::io::{stdin, stdout, Write};
+use std::io::{self, stdin, stdout, Write};
 
 extern crate readwrite;
 use readwrite::ReadWrite;
@@ -14,7 +14,7 @@ extern crate ssb_crypto;
 use ssb_crypto::{Keypair, NetworkKey, PublicKey};
 
 // For use with https://github.com/AljoschaMeyer/shs1-testsuite
-fn main() -> Result<(), HandshakeError> {
+fn main() -> Result<(), HandshakeError<io::Error>> {
     let args: Vec<String> = env::args().collect();
     if args.len() != 3 {
         println!("Usage: test_client net_id_as_hex server_pk_as_hex");

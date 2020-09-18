@@ -2,20 +2,30 @@
 //! [Scuttlebutt Protocol Guide](https://ssbc.github.io/scuttlebutt-protocol-guide/)
 //! ([repo](https://github.com/ssbc/scuttlebutt-protocol-guide)),
 //! which he graciously released into the public domain.
+#![cfg_attr(not(feature = "std"), no_std)]
 
 mod bytes;
 mod error;
 pub use error::HandshakeError;
 mod crypto;
+
+#[cfg(feature = "std")]
 mod util;
 
-mod client;
-pub use client::client_side;
+#[cfg(feature = "std")]
+#[path = ""]
+mod std_stuff {
+    mod client;
+    pub use client::client_side;
+    mod server;
+    pub use server::server_side;
+}
+#[cfg(feature = "std")]
+pub use std_stuff::*;
 
-mod server;
-pub use server::server_side;
+pub mod sync;
 
-#[cfg(test)]
+#[cfg(all(test, feature = "std"))]
 mod tests {
     use super::*;
     use std::io::ErrorKind;
@@ -49,7 +59,7 @@ mod tests {
         assert_eq!(c_out.read_starting_nonce.0, s_out.write_starting_nonce.0);
     }
 
-    fn is_eof_err<T>(r: &Result<T, HandshakeError>) -> bool {
+    fn is_eof_err<T>(r: &Result<T, HandshakeError<std::io::Error>>) -> bool {
         match r {
             Err(HandshakeError::Io(e)) => e.kind() == ErrorKind::UnexpectedEof,
             _ => false,

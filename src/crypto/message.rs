@@ -7,7 +7,6 @@
 
 use crate::bytes::as_ref;
 use crate::crypto::{keys::*, shared_secret::*};
-use crate::error::HandshakeError;
 
 use ssb_crypto::hash;
 use ssb_crypto::secretbox::{self, Hmac, Nonce};
@@ -33,12 +32,12 @@ impl ClientHello {
     //   authenticator: client_hmac,
     //   msg: client_ephemeral_pk,
     //   key: network_identifier)
-    pub fn verify(&self, net_key: &NetworkKey) -> Result<ClientEphPublicKey, HandshakeError> {
+    pub fn verify(&self, net_key: &NetworkKey) -> Option<ClientEphPublicKey> {
         let ClientHello(hmac, eph_pk) = self;
         if net_key.verify(hmac, eph_pk.as_bytes()) {
-            Ok(*eph_pk)
+            Some(*eph_pk)
         } else {
-            Err(HandshakeError::ClientHelloVerifyFailed)
+            None
         }
     }
 }
@@ -63,12 +62,12 @@ impl ServerHello {
     //   msg: server_ephemeral_pk,
     //   key: network_identifier
     // )
-    pub fn verify(&self, net_key: &NetworkKey) -> Result<ServerEphPublicKey, HandshakeError> {
+    pub fn verify(&self, net_key: &NetworkKey) -> Option<ServerEphPublicKey> {
         let ServerHello(hmac, eph_pk) = self;
         if net_key.verify(hmac, eph_pk.as_bytes()) {
-            Ok(*eph_pk)
+            Some(*eph_pk)
         } else {
-            Err(HandshakeError::ServerHelloVerifyFailed)
+            None
         }
     }
 }
@@ -125,18 +124,18 @@ impl ClientAuth {
         net_key: &NetworkKey,
         sa: &SharedA,
         sb: &SharedB,
-    ) -> Result<(ClientSignature, ClientPublicKey), HandshakeError> {
+    ) -> Option<(ClientSignature, ClientPublicKey)> {
         let ClientAuth(hmac, buf) = self;
         if !client_auth_key(net_key, sa, sb).open(buf, &hmac, &Nonce::zero()) {
-            return Err(HandshakeError::ClientAuthOpenFailed);
+            return None;
         }
 
         let ClientAuthPayload(sig, client_pk) = as_ref(buf);
         let signdata = ClientAuthSignData(net_key.clone(), ServerPublicKey(kp.public), sa.hash());
         if client_pk.0.verify(&sig.0, signdata.as_bytes()) {
-            Ok((*sig, *client_pk))
+            Some((*sig, *client_pk))
         } else {
-            Err(HandshakeError::ClientAuthVerifyFailed)
+            None
         }
     }
 }
@@ -187,6 +186,7 @@ impl ServerAccept {
     }
 
     /// Performed by the client
+    #[must_use]
     pub fn verify(
         &self,
         kp: &Keypair,
@@ -195,11 +195,11 @@ impl ServerAccept {
         sa: &SharedA,
         sb: &SharedB,
         sc: &SharedC,
-    ) -> Result<(), HandshakeError> {
+    ) -> Option<()> {
         let server_sig = {
             let ServerAccept(hmac, mut buf) = self;
             if !server_accept_key(net_key, sa, sb, sc).open(&mut buf, &hmac, &Nonce::zero()) {
-                return Err(HandshakeError::ServerAcceptOpenFailed);
+                return None;
             }
             ServerSignature(Signature(buf))
         };
@@ -217,9 +217,9 @@ impl ServerAccept {
             )
             .as_bytes(),
         ) {
-            Ok(())
+            Some(())
         } else {
-            Err(HandshakeError::ServerAcceptVerifyFailed)
+            None
         }
     }
 }

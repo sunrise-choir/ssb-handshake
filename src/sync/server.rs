@@ -1,57 +1,39 @@
 use crate::bytes::{as_mut, as_ref};
 use crate::crypto::{keys::*, message::*, outcome::*, shared_secret::*};
 use crate::error::HandshakeError;
-use crate::util::send;
+use crate::sync::util::send;
 
 use core::mem::size_of;
-use futures_io::{AsyncRead, AsyncWrite};
-use futures_util::io::{AsyncReadExt, AsyncWriteExt};
-use ssb_crypto::{ephemeral::generate_ephemeral_keypair, Keypair, NetworkKey};
-use std::io;
+use genio::{Read, Write};
+use ssb_crypto::ephemeral::{EphPublicKey, EphSecretKey};
+use ssb_crypto::{Keypair, NetworkKey};
 
 /// Perform the server side of the handshake using the given `AsyncRead + AsyncWrite` stream.
 /// Closes the stream on handshake failure.
-pub async fn server_side<S>(
+pub fn server_side<S, IoErr>(
     mut stream: S,
     net_key: &NetworkKey,
     keypair: &Keypair,
-) -> Result<HandshakeKeys, HandshakeError<io::Error>>
+    eph_kp: (EphPublicKey, EphSecretKey),
+) -> Result<HandshakeKeys, HandshakeError<IoErr>>
 where
-    S: AsyncRead + AsyncWrite + Unpin,
-{
-    let r = try_server_side(&mut stream, net_key, keypair).await;
-    if r.is_err() {
-        stream.close().await.unwrap_or(());
-    }
-    r
-}
-
-async fn try_server_side<S>(
-    mut stream: S,
-    net_key: &NetworkKey,
-    keypair: &Keypair,
-) -> Result<HandshakeKeys, HandshakeError<io::Error>>
-where
-    S: AsyncRead + AsyncWrite + Unpin,
+    S: Read<ReadError = IoErr> + Write<WriteError = IoErr, FlushError = IoErr>,
 {
     use HandshakeError::*;
 
-    let (eph_pk, eph_sk) = {
-        let (p, s) = generate_ephemeral_keypair();
-        (ServerEphPublicKey(p), ServerEphSecretKey(s))
-    };
+    let (eph_pk, eph_sk) = (ServerEphPublicKey(eph_kp.0), ServerEphSecretKey(eph_kp.1));
 
     // Receive and verify client hello
     let client_eph_pk = {
         let mut buf = [0; size_of::<ClientHello>()];
-        stream.read_exact(&mut buf).await?;
+        stream.read_exact(&mut buf)?;
         as_ref::<ClientHello>(&buf)
             .verify(&net_key)
             .ok_or(ClientHelloVerifyFailed)?
     };
 
     // Send server hello
-    send(&mut stream, ServerHello::new(&eph_pk, &net_key)).await?;
+    send(&mut stream, ServerHello::new(&eph_pk, &net_key))?;
 
     // Derive shared secrets
     let shared_a = SharedA::server_side(&eph_sk, &client_eph_pk).ok_or(SharedAInvalid)?;
@@ -60,7 +42,7 @@ where
     // Receive and verify client auth
     let (client_sig, client_pk) = {
         let mut buf = [0u8; 112];
-        stream.read_exact(&mut buf).await?;
+        stream.read_exact(&mut buf)?;
 
         as_mut::<ClientAuth>(&mut buf)
             .verify(&keypair, &net_key, &shared_a, &shared_b)
@@ -82,8 +64,7 @@ where
             &shared_b,
             &shared_c,
         ),
-    )
-    .await?;
+    )?;
 
     Ok(HandshakeKeys {
         read_key: client_to_server_key(
