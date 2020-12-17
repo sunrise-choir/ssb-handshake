@@ -16,14 +16,14 @@ default = ["std"]
 std = ["futures-io", "futures-util", "ssb-crypto/getrandom", "genio/std"]
 
 [dependencies]
-futures-io = { version = "0.3.5", optional = true }
-futures-util = { version = "0.3.5", optional = true }
-ssb-crypto = { version = "0.2.0", default-features = false, features = ["dalek"] }
+futures-io = { version = "0.3.8", optional = true }
+futures-util = { version = "0.3.8", optional = true }
+ssb-crypto = { version = "0.2.2", default-features = false, features = ["dalek"] }
 zerocopy = "0.3.0"
 genio = { version = "0.2.1", default-features = false }
 
 [dev-dependencies]
-async-ringbuffer = "0.5.4"
-hex = "0.4.0"
-futures = "0.3.5"
-readwrite = "0.1.1"
+async-ringbuffer = "0.5.5"
+hex = "0.4.2"
+futures = "0.3.8"
+readwrite = "0.1.2"
