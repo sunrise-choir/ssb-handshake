@@ -37,7 +37,7 @@ fn main() -> Result<(), HandshakeError<io::Error>> {
     v.extend_from_slice(&o.read_starting_nonce.0);
     assert_eq!(v.len(), 112);
 
-    stdout().write(&v).unwrap();
+    stdout().write_all(&v).unwrap();
     stdout().flush().unwrap();
 
     Ok(())
